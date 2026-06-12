@@ -504,7 +504,7 @@ function renderDomains() {
     var color = days < 30 ? '#c0392b' : days < 90 ? '#e67e22' : 'var(--muted)';
     var assignedSite = assigned ? sites.find(function(s) { return hostname(s.url).toLowerCase() === d.name.toLowerCase(); }) : null;
     return '<div style="display:flex;align-items:center;padding:10px 14px;border-bottom:.5px solid var(--border);gap:12px">' +
-      '<span style="flex:1;font-size:13px;color:var(--noir)">' + d.name + '</span>' +
+      '<a href="http://' + d.name + '" target="_blank" style="flex:1;font-size:13px;color:var(--noir);text-decoration:none;border-bottom:.5px solid var(--border)">' + d.name + '</a>' +
       (assignedSite ? '<span style="font-size:11px;color:var(--muted)">' + assignedSite.name + '</span>' : '') +
       '<span style="font-size:11px;color:' + color + ';min-width:100px;text-align:right">' + formatExpiry(d.expiry) + '</span>' +
       (days < 90 ? '<span style="font-size:10px;padding:2px 6px;background:' + (days < 30 ? '#fdecea' : '#fef3e2') + ';color:' + color + '">!' + Math.round(days) + 'd</span>' : '') +
