@@ -29,13 +29,37 @@ exports.handler = async function(event) {
   try {
     const firstPage = await fetchPage(1);
 
-    // Return raw XML for debugging
+    if (firstPage.includes('<Status>ERROR</Status>')) {
+      const errMatch = firstPage.match(/<Error Number[^>]*>([^<]+)<\/Error>/);
+      const errMsg = errMatch ? errMatch[1] : 'Namecheap API error';
+      return { statusCode: 200, body: JSON.stringify({ error: errMsg }) };
+    }
+
+    const totalMatch = firstPage.match(/<TotalItems>(\d+)<\/TotalItems>/);
+    const total = totalMatch ? parseInt(totalMatch[1]) : 0;
+    const totalPages = Math.ceil(total / 100) || 1;
+
+    let allXml = firstPage;
+    for (let p = 2; p <= totalPages; p++) {
+      allXml += await fetchPage(p);
+    }
+
+    const domainMatches = [...allXml.matchAll(/<Domain\s([^/]+)\/>/g)];
+    const domains = domainMatches.map(m => {
+      const attrs = m[1];
+      const getName = attrs.match(/Name="([^"]+)"/);
+      const getExpiry = attrs.match(/Expires="([^"]+)"/);
+      return {
+        name: getName ? getName[1] : '',
+        expiry: getExpiry ? getExpiry[1] : ''
+      };
+    }).filter(d => d.name);
+
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ debug: firstPage.substring(0, 2000) })
+      body: JSON.stringify({ domains: domains, total: domains.length })
     };
-
   } catch(err) {
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
