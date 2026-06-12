@@ -27,38 +27,36 @@ exports.handler = async function(event) {
   }
 
   try {
-    // Fetch first page to get total
     const firstPage = await fetchPage(1);
 
-    // Parse total items from XML
+    // Check for API error first
+    if (firstPage.includes('<Status>ERROR</Status>')) {
+      const errMatch = firstPage.match(/<Error Number[^>]*>([^<]+)<\/Error>/);
+      const errMsg = errMatch ? errMatch[1] : 'Namecheap API error';
+      return { statusCode: 200, body: JSON.stringify({ error: errMsg, raw: firstPage.substring(0, 500) }) };
+    }
+
     const totalMatch = firstPage.match(/<TotalItems>(\d+)<\/TotalItems>/);
     const total = totalMatch ? parseInt(totalMatch[1]) : 0;
     const totalPages = Math.ceil(total / 100);
 
-    // Collect all domain XML
     let allXml = firstPage;
     for (let p = 2; p <= totalPages; p++) {
       allXml += await fetchPage(p);
     }
 
-    // Extract domains with regex
-    const domainMatches = [...allXml.matchAll(/<Domain\s([^>]+)\/>/g)];
+    const domainMatches = [...allXml.matchAll(/<Domain\s([^/]+)\/>/g)];
     const domains = domainMatches.map(m => {
       const attrs = m[1];
       const getName = attrs.match(/Name="([^"]+)"/);
       const getExpiry = attrs.match(/Expires="([^"]+)"/);
+      const getExpired = attrs.match(/IsExpired="([^"]+)"/);
       return {
         name: getName ? getName[1] : '',
-        expiry: getExpiry ? getExpiry[1] : ''
+        expiry: getExpiry ? getExpiry[1] : '',
+        expired: getExpired ? getExpired[1] : 'false'
       };
     }).filter(d => d.name);
-
-    // Check for API error
-    if (firstPage.includes('<Status>ERROR</Status>')) {
-      const errMatch = firstPage.match(/<Error Number[^>]*>([^<]+)<\/Error>/);
-      const errMsg = errMatch ? errMatch[1] : 'Namecheap API error';
-      return { statusCode: 200, body: JSON.stringify({ error: errMsg }) };
-    }
 
     return {
       statusCode: 200,
