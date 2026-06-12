@@ -26,29 +26,42 @@ exports.handler = async function(event) {
     });
   }
 
+  function extractAttr(str, attr) {
+    const m = str.match(new RegExp(attr + '="([^"]+)"'));
+    return m ? m[1] : '';
+  }
+
   try {
     const firstPage = await fetchPage(1);
 
-    if (firstPage.includes('ERROR')) {
-      return { statusCode: 200, body: JSON.stringify({ error: 'API error', raw: firstPage.substring(0, 1000) }) };
+    if (firstPage.includes('<Status>ERROR</Status>')) {
+      const errMatch = firstPage.match(/<Error Number[^>]*>([^<]+)<\/Error>/);
+      return { statusCode: 200, body: JSON.stringify({ error: errMatch ? errMatch[1] : 'Namecheap API error' }) };
     }
 
-    // Try both regex patterns as Namecheap XML format varies
-    const pattern1 = [...firstPage.matchAll(/<Domain\s([^/]+)\/>/g)];
-    const pattern2 = [...firstPage.matchAll(/Name="([^"]+)"[^>]*Expires="([^"]+)"/g)];
-    const pattern3 = [...firstPage.matchAll(/Name="([^"]+)"/g)];
+    const totalMatch = firstPage.match(/<TotalItems>(\d+)<\/TotalItems>/);
+    const total = totalMatch ? parseInt(totalMatch[1]) : 0;
+    const totalPages = Math.ceil(total / 100) || 1;
+
+    let allXml = firstPage;
+    for (let p = 2; p <= totalPages; p++) {
+      allXml += await fetchPage(p);
+    }
+
+    // Split on <Domain and parse each block — handles multiline attributes
+    const parts = allXml.split('<Domain ');
+    const domains = [];
+    for (let i = 1; i < parts.length; i++) {
+      const block = parts[i];
+      const name = extractAttr(block, 'Name');
+      const expiry = extractAttr(block, 'Expires');
+      if (name) domains.push({ name, expiry });
+    }
 
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        raw: firstPage.substring(0, 1500),
-        pattern1count: pattern1.length,
-        pattern2count: pattern2.length,
-        pattern3count: pattern3.length,
-        domains: [],
-        total: 0
-      })
+      body: JSON.stringify({ domains, total: domains.length })
     };
   } catch(err) {
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
