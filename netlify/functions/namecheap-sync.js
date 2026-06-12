@@ -48,7 +48,6 @@ exports.handler = async function(event) {
       allXml += await fetchPage(p);
     }
 
-    // Split on <Domain and parse each block — handles multiline attributes
     const parts = allXml.split('<Domain ');
     const domains = [];
     for (let i = 1; i < parts.length; i++) {
@@ -56,6 +55,15 @@ exports.handler = async function(event) {
       const name = extractAttr(block, 'Name');
       const expiry = extractAttr(block, 'Expires');
       if (name) domains.push({ name, expiry });
+    }
+
+    // If empty, return raw for debugging
+    if (domains.length === 0) {
+      return {
+        statusCode: 200,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domains: [], total: 0, debug: allXml.substring(0, 2000), partsCount: parts.length })
+      };
     }
 
     return {
