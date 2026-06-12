@@ -15,6 +15,8 @@ exports.handler = async function(event) {
 
   const https = require('https');
 
+  // Use the user's actual IP (passed from browser) as ClientIp
+  // Namecheap will accept it if it's whitelisted
   function fetchPage(page) {
     return new Promise((resolve, reject) => {
       const url = `https://api.namecheap.com/xml.response?ApiUser=${encodeURIComponent(username)}&ApiKey=${encodeURIComponent(apiKey)}&UserName=${encodeURIComponent(username)}&ClientIp=${encodeURIComponent(clientIp)}&Command=namecheap.domains.getList&PageSize=100&Page=${page}`;
@@ -55,15 +57,6 @@ exports.handler = async function(event) {
       const name = extractAttr(block, 'Name');
       const expiry = extractAttr(block, 'Expires');
       if (name) domains.push({ name, expiry });
-    }
-
-    // If empty, return raw for debugging
-    if (domains.length === 0) {
-      return {
-        statusCode: 200,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ domains: [], total: 0, debug: allXml.substring(0, 2000), partsCount: parts.length })
-      };
     }
 
     return {
