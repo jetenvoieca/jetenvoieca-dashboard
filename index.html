@@ -87,8 +87,14 @@ button,input,select{font-family:'Jost',sans-serif;font-size:13px;font-weight:300
 <body>
 
 <div class="topbar">
-  <span class="topbar-title">Jetenvoica Dashboard</span>
-  <div class="topbar-right">
+  <div style="display:flex;align-items:center;gap:20px">
+    <span class="topbar-title">Jetenvoica Dashboard</span>
+    <div style="display:flex;border:.5px solid rgba(26,23,20,0.12)">
+      <button onclick="showView('sites')" id="tab-sites" style="padding:6px 16px;border:none;background:#1A1714;color:#FAF7F2;font-family:inherit;font-size:11px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer">Sites</button>
+      <button onclick="showView('domains')" id="tab-domains" style="padding:6px 16px;border:none;background:transparent;color:#7A7066;font-family:inherit;font-size:11px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;border-left:.5px solid rgba(26,23,20,0.12)">Domains</button>
+    </div>
+  </div>
+  <div class="topbar-right" id="sites-controls">
     <span class="topbar-stat" id="site-count">0 sites</span>
     <span class="topbar-stat gold" id="mrr" style="display:none"></span>
     <div style="display:flex;border:.5px solid rgba(26,23,20,0.12)">
@@ -144,7 +150,22 @@ button,input,select{font-family:'Jost',sans-serif;font-size:13px;font-weight:300
 
 <div class="grid" id="grid"></div>
 
-<!-- MODAL -->
+<div id="domains-view" style="display:none;max-width:900px;margin:0 auto;padding:24px">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+    <div>
+      <h2 style="font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:300;margin-bottom:4px">Unassigned Domains</h2>
+      <p style="font-size:12px;color:var(--muted)">Domains in your Namecheap account not linked to any site card</p>
+    </div>
+    <span id="unassigned-count" style="font-size:12px;color:var(--muted)"></span>
+  </div>
+  <div id="domains-table"></div>
+  <div style="margin-top:32px;padding-top:20px;border-top:.5px solid var(--border)">
+    <h2 style="font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:300;margin-bottom:4px">All Namecheap Domains</h2>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:20px">Complete list with expiry dates</p>
+    <div id="all-domains-table"></div>
+  </div>
+  <p style="font-size:11px;color:var(--muted);margin-top:24px;text-align:center">Import updated data via ⚙ NC Sync → Import namecheap-domains.json</p>
+</div>
 <div class="modal-bg" id="modal" style="display:none">
   <div class="modal">
     <p class="modal-title" id="modal-title">Add New Site</p>
@@ -421,6 +442,8 @@ function importNcDomains(input) {
       var data = JSON.parse(e.target.result);
       if (!data.domains || !Array.isArray(data.domains)) throw new Error('Invalid file format');
 
+      localStorage.setItem('nc_domains', JSON.stringify(data));
+
       var allDomains = data.domains;
       var matched = 0;
 
@@ -451,6 +474,60 @@ function importNcDomains(input) {
     }
   };
   reader.readAsText(file);
+}
+
+function showView(view) {
+  var isSites = view === 'sites';
+  document.getElementById('grid').style.display = isSites ? '' : 'none';
+  document.getElementById('domains-view').style.display = isSites ? 'none' : 'block';
+  document.getElementById('sites-controls').style.display = isSites ? 'flex' : 'none';
+  document.getElementById('tab-sites').style.background = isSites ? '#1A1714' : 'transparent';
+  document.getElementById('tab-sites').style.color = isSites ? '#FAF7F2' : '#7A7066';
+  document.getElementById('tab-domains').style.background = isSites ? 'transparent' : '#1A1714';
+  document.getElementById('tab-domains').style.color = isSites ? '#7A7066' : '#FAF7F2';
+  if (!isSites) renderDomains();
+}
+
+function renderDomains() {
+  var ncData = null;
+  try { ncData = JSON.parse(localStorage.getItem('nc_domains') || 'null'); } catch(e) {}
+
+  if (!ncData) {
+    document.getElementById('domains-table').innerHTML = '<p style="color:var(--muted);font-size:13px">No domain data yet — import your namecheap-domains.json via ⚙ NC Sync.</p>';
+    document.getElementById('all-domains-table').innerHTML = '';
+    document.getElementById('unassigned-count').textContent = '';
+    return;
+  }
+
+  var allDomains = ncData.domains;
+  var siteHosts = sites.map(function(s) { return hostname(s.url).toLowerCase(); });
+  var unassigned = allDomains.filter(function(d) { return !siteHosts.includes(d.name.toLowerCase()); });
+
+  document.getElementById('unassigned-count').textContent = unassigned.length + ' domains · fetched ' + new Date(ncData.fetched).toLocaleDateString('en-GB');
+
+  function domainRow(d, assigned) {
+    var expDate = new Date(d.expiry);
+    var days = (expDate - new Date()) / (1000*60*60*24);
+    var color = days < 30 ? '#c0392b' : days < 90 ? '#e67e22' : 'var(--muted)';
+    var assignedSite = assigned ? sites.find(function(s) { return hostname(s.url).toLowerCase() === d.name.toLowerCase(); }) : null;
+    return '<div style="display:flex;align-items:center;padding:10px 14px;border-bottom:.5px solid var(--border);gap:12px">' +
+      '<span style="flex:1;font-size:13px;color:var(--noir)">' + d.name + '</span>' +
+      (assignedSite ? '<span style="font-size:11px;color:var(--muted)">' + assignedSite.name + '</span>' : '') +
+      '<span style="font-size:11px;color:' + color + ';min-width:100px;text-align:right">' + formatExpiry(d.expiry) + '</span>' +
+      (days < 90 ? '<span style="font-size:10px;padding:2px 6px;background:' + (days < 30 ? '#fdecea' : '#fef3e2') + ';color:' + color + '">!' + Math.round(days) + 'd</span>' : '') +
+      '</div>';
+  }
+
+  var unassignedHtml = unassigned.length === 0
+    ? '<p style="color:#2e7d32;font-size:13px;padding:12px 0">✓ All Namecheap domains are assigned to site cards.</p>'
+    : '<div style="border:.5px solid var(--border)">' + unassigned.map(function(d) { return domainRow(d, false); }).join('') + '</div>';
+  document.getElementById('domains-table').innerHTML = unassignedHtml;
+
+  var allHtml = '<div style="border:.5px solid var(--border)">' +
+    allDomains.sort(function(a,b) {
+      return new Date(a.expiry) - new Date(b.expiry);
+    }).map(function(d) { return domainRow(d, true); }).join('') + '</div>';
+  document.getElementById('all-domains-table').innerHTML = allHtml;
 }
 
 function openSettings() {
