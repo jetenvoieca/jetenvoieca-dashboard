@@ -205,13 +205,9 @@ button,input,select{font-family:'Jost',sans-serif;font-size:13px;font-weight:300
       <label>Notes (internal, not shown on card)</label>
       <textarea id="f-notes" rows="3" style="width:100%;padding:9px 12px;border:.5px solid var(--border);font-family:inherit;font-size:13px;color:#1A1714;outline:none;border-radius:0;resize:vertical;line-height:1.7"></textarea>
     </div>
-    <div class="toggle-row" onclick="toggleVerified()" style="margin-bottom:12px">
+    <div class="toggle-row" onclick="toggleVerified()" style="margin-bottom:20px">
       <div class="toggle" id="verified-toggle"><div class="toggle-knob"></div></div>
       <span class="toggle-label">Verified</span>
-    </div>
-    <div class="toggle-row" onclick="toggleDomain()" style="margin-bottom:20px">
-      <div class="toggle" id="domain-toggle"><div class="toggle-knob"></div></div>
-      <span class="toggle-label">ISYT Domain</span>
     </div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeModal()">Cancel</button>
@@ -450,8 +446,8 @@ function importNcDomains(input) {
       sites = sites.map(function(s) {
         var host = hostname(s.url);
         var match = allDomains.find(function(d) { return d.name.toLowerCase() === host.toLowerCase(); });
-        if (match) { matched++; return Object.assign({}, s, { nc_expiry: match.expiry, nc_synced: new Date().toISOString() }); }
-        return s;
+        if (match) { matched++; return Object.assign({}, s, { nc_expiry: match.expiry, nc_synced: new Date().toISOString(), domain_owned: true }); }
+        return Object.assign({}, s, { domain_owned: false });
       });
 
       var siteHosts = sites.map(function(s) { return hostname(s.url).toLowerCase(); });
