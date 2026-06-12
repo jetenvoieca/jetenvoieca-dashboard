@@ -15,8 +15,6 @@ exports.handler = async function(event) {
 
   const https = require('https');
 
-  // Use the user's actual IP (passed from browser) as ClientIp
-  // Namecheap will accept it if it's whitelisted
   function fetchPage(page) {
     return new Promise((resolve, reject) => {
       const url = `https://api.namecheap.com/xml.response?ApiUser=${encodeURIComponent(username)}&ApiKey=${encodeURIComponent(apiKey)}&UserName=${encodeURIComponent(username)}&ClientIp=${encodeURIComponent(clientIp)}&Command=namecheap.domains.getList&PageSize=100&Page=${page}`;
@@ -38,7 +36,7 @@ exports.handler = async function(event) {
 
     if (firstPage.includes('<Status>ERROR</Status>')) {
       const errMatch = firstPage.match(/<Error Number[^>]*>([^<]+)<\/Error>/);
-      return { statusCode: 200, body: JSON.stringify({ error: errMatch ? errMatch[1] : 'Namecheap API error' }) };
+      return { statusCode: 200, body: JSON.stringify({ error: errMatch ? errMatch[1] : 'Namecheap API error', raw: firstPage.substring(0, 500) }) };
     }
 
     const totalMatch = firstPage.match(/<TotalItems>(\d+)<\/TotalItems>/);
@@ -62,8 +60,14 @@ exports.handler = async function(event) {
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ domains, total: domains.length })
+      body: JSON.stringify({ 
+        domains, 
+        total: domains.length,
+        partsCount: parts.length,
+        debug: domains.length === 0 ? allXml.substring(0, 2000) : null
+      })
     };
+
   } catch(err) {
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
