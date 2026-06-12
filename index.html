@@ -130,8 +130,8 @@ button,input,select{font-family:'Jost',sans-serif;font-size:13px;font-weight:300
       <button class="btn-cancel" onclick="closeSettings()">Cancel</button>
     </div>
     <div style="border-top:.5px solid var(--border);padding-top:16px">
-      <p style="font-size:12px;color:var(--muted);margin-bottom:10px">Checks expiry dates for all cards with ISYT Domain enabled, using public WHOIS data. No API key needed.</p>
-      <button class="btn-export" onclick="runNcSync()" style="width:100%;text-align:center" id="sync-btn">↻ Check Domain Expiry</button>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:10px">Fetches all your Namecheap domains, matches them to cards by hostname, updates expiry dates, and shows any domains not yet assigned to a card.</p>
+      <button class="btn-export" onclick="runNcSync()" style="width:100%;text-align:center" id="sync-btn">↻ Sync Domains from Namecheap</button>
       <p id="sync-status" style="font-size:12px;color:var(--muted);margin-top:10px;text-align:center"></p>
     </div>
   </div>
@@ -429,48 +429,59 @@ function saveNcSettings() {
 }
 
 async function runNcSync() {
+  var u = localStorage.getItem('nc_username');
+  var k = localStorage.getItem('nc_apikey');
+  var ip = localStorage.getItem('nc_ip');
+  if (!u || !k || !ip) { alert('Please save your Namecheap settings first'); return; }
+
   var status = document.getElementById('sync-status');
   var btn = document.getElementById('sync-btn');
-  btn.textContent = '↻ Checking…';
+  btn.textContent = '↻ Syncing…';
   btn.disabled = true;
+  status.textContent = 'Fetching domains from Namecheap…';
   status.style.color = 'var(--muted)';
 
-  var toCheck = sites.filter(function(s) { return s.domain_owned; });
-  if (toCheck.length === 0) {
+  try {
+    var res = await fetch('/.netlify/functions/namecheap-sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: u, apiKey: k, clientIp: ip })
+    });
+    var data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    var allDomains = data.domains;
+    var matched = 0;
+
+    sites = sites.map(function(s) {
+      var host = hostname(s.url);
+      var match = allDomains.find(function(d) { return d.name.toLowerCase() === host.toLowerCase(); });
+      if (match) {
+        matched++;
+        return Object.assign({}, s, { nc_expiry: match.expiry, nc_synced: new Date().toISOString() });
+      }
+      return s;
+    });
+
+    // Find unassigned domains
+    var siteHosts = sites.map(function(s) { return hostname(s.url).toLowerCase(); });
+    var unassigned = allDomains.filter(function(d) {
+      return !siteHosts.includes(d.name.toLowerCase());
+    });
+
+    save();
+    renderGrid();
+    status.style.color = '#2e7d32';
+    var msg = '✓ ' + matched + ' of ' + sites.length + ' cards matched · ' + allDomains.length + ' domains in Namecheap';
+    if (unassigned.length > 0) {
+      msg += ' · ' + unassigned.length + ' unassigned: ' + unassigned.map(function(d) { return d.name; }).join(', ');
+    }
+    status.textContent = msg;
+  } catch(err) {
     status.style.color = '#c0392b';
-    status.textContent = '✗ No cards have ISYT Domain enabled';
-    btn.textContent = '↻ Check Domain Expiry';
-    btn.disabled = false;
-    return;
+    status.textContent = '✗ Error: ' + err.message;
   }
-
-  status.textContent = 'Checking ' + toCheck.length + ' domains…';
-  var updated = 0; var errors = [];
-
-  for (var i = 0; i < toCheck.length; i++) {
-    var s = toCheck[i];
-    var host = hostname(s.url);
-    status.textContent = 'Checking ' + (i+1) + ' of ' + toCheck.length + ': ' + host;
-    try {
-      var res = await fetch('https://api.whoisfreaks.com/v1.0/whois?whois=live&domainName=' + encodeURIComponent(host) + '&apiKey=free');
-      if (!res.ok) throw new Error('API error');
-      var data = await res.json();
-      var expiry = data.expiry_date || data.registry_expiry_date || null;
-      if (expiry) {
-        var sid = s.id;
-        sites = sites.map(function(x) {
-          return x.id === sid ? Object.assign({}, x, { nc_expiry: expiry, nc_synced: new Date().toISOString() }) : x;
-        });
-        updated++;
-      } else { errors.push(host); }
-    } catch(e) { errors.push(host); }
-    await new Promise(function(r) { setTimeout(r, 600); });
-  }
-
-  save(); renderGrid();
-  status.style.color = updated > 0 ? '#2e7d32' : '#c0392b';
-  status.textContent = '✓ Updated ' + updated + ' of ' + toCheck.length + ' domains' + (errors.length ? ' · Could not fetch: ' + errors.join(', ') : '');
-  btn.textContent = '↻ Check Domain Expiry';
+  btn.textContent = '↻ Sync Domains from Namecheap';
   btn.disabled = false;
 }
 
