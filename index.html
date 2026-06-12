@@ -334,7 +334,6 @@ function openModal(site) {
   document.getElementById('f-sub-amount').value = site ? (site.sub_amount || '') : '';
   document.getElementById('f-notes').value = site ? (site.notes || '') : '';
   document.getElementById('f-image').value = '';
-  updateDomainToggle();
   updateVerifiedToggle();
   document.getElementById('modal').style.display = 'flex';
   document.getElementById('f-name').focus();
@@ -347,8 +346,6 @@ function openEdit(id) {
 
 function closeModal() { document.getElementById('modal').style.display = 'none'; }
 
-function toggleDomain() { domainOwned = !domainOwned; updateDomainToggle(); }
-function updateDomainToggle() { var t = document.getElementById('domain-toggle'); t.classList.toggle('on', domainOwned); }
 function toggleVerified() { verified = !verified; updateVerifiedToggle(); }
 function updateVerifiedToggle() { var t = document.getElementById('verified-toggle'); t.classList.toggle('on', verified); }
 
