@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jetenvoieca</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=Inter:wght@300;400&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden}
+body{font-family:'Inter',sans-serif;background:#F0E8C8;color:#1a1714}
+
+.page{display:grid;grid-template-columns:1fr 360px;height:100vh}
+
+/* LEFT */
+.left{position:relative;overflow:hidden}
+.left svg{position:absolute;inset:0;width:100%;height:100%}
+
+/* RIGHT */
+.right{
+  display:flex;flex-direction:column;justify-content:space-between;
+  padding:40px 44px 40px 40px;
+  border-left:0.5px solid rgba(26,23,20,0.18);
+  background:#F0E8C8;
+  overflow-y:auto;
+}
+
+.wordmark{
+  font-family:'Cormorant Garamond',serif;
+  font-size:11px;font-weight:300;
+  letter-spacing:.32em;text-transform:uppercase;
+  color:#1a1714;opacity:.55;
+}
+
+nav{display:flex;flex-direction:column;gap:5px;align-items:flex-end;margin-top:18px}
+nav a{
+  font-family:'Cormorant Garamond',serif;
+  font-size:17px;font-weight:300;font-style:italic;
+  letter-spacing:.06em;color:#1a1714;text-decoration:none;
+  opacity:.4;transition:opacity .2s;
+}
+nav a:hover,nav a.active{opacity:1}
+nav a.active{font-style:normal;opacity:.85}
+
+.messages{display:flex;flex-direction:column;gap:10px}
+
+.msg{
+  border-top:0.5px solid rgba(26,23,20,0.18);
+  padding:16px 0 16px 0;
+  cursor:pointer;
+  position:relative;
+  transition:padding-left .25s;
+}
+.msg:hover{padding-left:10px}
+.msg-eyebrow{
+  font-size:9px;letter-spacing:.22em;text-transform:uppercase;
+  color:#B8561E;margin-bottom:9px;font-weight:400;
+}
+.msg-title{
+  font-family:'Cormorant Garamond',serif;
+  font-size:23px;font-weight:300;line-height:1.15;
+  color:#1a1714;margin-bottom:7px;
+}
+.msg-body{
+  font-size:11px;line-height:1.65;
+  color:rgba(26,23,20,0.48);
+  letter-spacing:.015em;
+  max-height:0;overflow:hidden;
+  transition:max-height .35s ease;
+}
+.msg:hover .msg-body{max-height:80px}
+
+.footer-area{display:flex;flex-direction:column;gap:5px;align-items:flex-end}
+.footer-area span{
+  font-size:9px;letter-spacing:.18em;text-transform:uppercase;
+  color:rgba(26,23,20,0.35);
+}
+.footer-area a{
+  font-size:9px;letter-spacing:.18em;text-transform:uppercase;
+  color:#B8561E;text-decoration:none;opacity:.75;transition:opacity .2s;
+}
+.footer-area a:hover{opacity:1}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="left">
+    <svg viewBox="0 0 800 1000" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+
+      <!-- Ground colour -->
+      <rect width="800" height="1000" fill="#E8C83A"/>
+
+      <!-- Large amber sweep — top left organic wash -->
+      <ellipse cx="220" cy="100" rx="310" ry="230" fill="#C9A828" opacity="0.65"/>
+
+      <!-- Terracotta vertical pillar — the spine of the composition -->
+      <rect x="340" y="0" width="78" height="640" fill="#B8521A"/>
+      <!-- Shadow edge on pillar -->
+      <rect x="418" y="0" width="18" height="640" fill="#3a2818" opacity="0.18"/>
+
+      <!-- Dark charcoal panel fragment — top right -->
+      <rect x="418" y="40" width="52" height="220" fill="#2e2820"/>
+
+      <!-- Stone square — textured ground for the circle -->
+      <rect x="148" y="210" width="228" height="218" fill="#B0A07A"/>
+      <!-- Horizontal grain lines -->
+      <g stroke="#8A7A5A" stroke-width="0.6" opacity="0.35">
+        <line x1="148" y1="230" x2="376" y2="230"/><line x1="148" y1="248" x2="376" y2="248"/>
+        <line x1="148" y1="266" x2="376" y2="266"/><line x1="148" y1="284" x2="376" y2="284"/>
+        <line x1="148" y1="302" x2="376" y2="302"/><line x1="148" y1="320" x2="376" y2="320"/>
+        <line x1="148" y1="338" x2="376" y2="338"/><line x1="148" y1="356" x2="376" y2="356"/>
+        <line x1="148" y1="374" x2="376" y2="374"/><line x1="148" y1="392" x2="376" y2="392"/>
+        <line x1="148" y1="410" x2="376" y2="410"/>
+      </g>
+
+      <!-- Circle on stone — the eye of the composition -->
+      <circle cx="262" cy="318" r="76" fill="none" stroke="#D8B830" stroke-width="2.8"/>
+      <circle cx="262" cy="318" r="42" fill="none" stroke="#D8B830" stroke-width="0.8" opacity="0.5"/>
+
+      <!-- Sky blue grid — architectural drawing overlay -->
+      <rect x="72" y="92" width="188" height="182" fill="none" stroke="#7EC8D4" stroke-width="1.2"/>
+      <rect x="96" y="114" width="140" height="138" fill="none" stroke="#7EC8D4" stroke-width="0.6" opacity="0.4"/>
+
+      <!-- Triangle accent — geometric punctuation -->
+      <polygon points="280,590 310,548 340,590" fill="none" stroke="#D8B830" stroke-width="1.2"/>
+
+      <!-- FIGURE — elegant standing silhouette, left side -->
+      <g fill="#1a1714">
+        <ellipse cx="138" cy="455" rx="13" ry="15"/>
+        <path d="M124 470 Q113 510 106 610 Q102 648 112 660 Q126 666 144 659 Q158 666 170 660 Q178 648 174 610 Q168 510 152 470 Z"/>
+        <path d="M136 474 Q122 488 108 480 Q104 466 114 460 Z"/>
+        <path d="M150 495 Q172 530 184 565" fill="none" stroke="#1a1714" stroke-width="9" stroke-linecap="round"/>
+      </g>
+
+      <!-- Large grey organic ground form -->
+      <ellipse cx="200" cy="840" rx="290" ry="135" fill="#5A5A5A" opacity="0.72"/>
+
+      <!-- Scattered tan fragments — floor debris -->
+      <path d="M300 690 Q338 660 378 672 Q388 716 354 736 Q316 742 300 716 Z" fill="#C4A070"/>
+      <path d="M375 720 Q408 698 440 710 Q434 752 406 762 Q377 756 375 720 Z" fill="#C4A070" opacity="0.72"/>
+      <path d="M334 762 Q368 742 388 758 Q382 792 354 796 Q326 788 334 762 Z" fill="#B08858"/>
+
+      <!-- Golden thread lines — wandering energy -->
+      <path d="M210 640 Q300 598 368 660 Q436 722 510 685 Q580 648 680 710" fill="none" stroke="#D8B830" stroke-width="1.1" opacity="0.55"/>
+      <path d="M290 720 Q338 688 398 712 Q458 738 540 718" fill="none" stroke="#D8B830" stroke-width="0.7" opacity="0.38"/>
+      <path d="M150 780 Q240 740 330 760 Q420 780 520 750 Q620 720 700 745" fill="none" stroke="#D8B830" stroke-width="0.5" opacity="0.28"/>
+
+      <!-- Wine glass — civilised detail, lower left -->
+      <g stroke="#ffffff" stroke-width="1.4" fill="none" opacity="0.55">
+        <path d="M162 790 Q154 768 148 742 Q158 730 178 730 Q198 730 208 742 Q202 768 194 790 Z"/>
+        <line x1="178" y1="790" x2="178" y2="836"/>
+        <line x1="162" y1="836" x2="194" y2="836"/>
+      </g>
+
+      <!-- Orange fragment — another colour note, bottom right -->
+      <path d="M540 820 Q580 798 618 812 Q624 848 598 858 Q566 862 540 842 Z" fill="#B8521A" opacity="0.6"/>
+
+      <!-- Horizontal grain — full bleed subtle texture -->
+      <g stroke="#C4A028" stroke-width="0.3" opacity="0.1">
+        <line x1="0" y1="150" x2="800" y2="150"/><line x1="0" y1="300" x2="800" y2="300"/>
+        <line x1="0" y1="450" x2="800" y2="450"/><line x1="0" y1="600" x2="800" y2="600"/>
+        <line x1="0" y1="750" x2="800" y2="750"/><line x1="0" y1="900" x2="800" y2="900"/>
+      </g>
+
+      <!-- Vertical wordmark ghost -->
+      <text transform="rotate(-90,762,500)" x="0" y="0" text-anchor="middle"
+        font-family="Georgia,serif" font-size="11" font-weight="300"
+        fill="#1a1714" opacity="0.18" letter-spacing="5">
+        JETENVOIECA — AUDE
+      </text>
+
+    </svg>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="right">
+
+    <div>
+      <div class="wordmark">Jetenvoieca</div>
+      <nav>
+        <a href="#" class="active">Home</a>
+        <a href="story.html">Story</a>
+        <a href="contact.html">Contact</a>
+      </nav>
+    </div>
+
+    <div class="messages">
+      <div class="msg" onclick="window.location='artists.html'">
+        <div class="msg-eyebrow">Artists</div>
+        <div class="msg-title">Websites for Artists</div>
+        <div class="msg-body">Beautiful, minimal portfolio sites. Built to show the work, not obscure it. Every site different. Every artist served.</div>
+      </div>
+      <div class="msg" onclick="window.location='retail.html'">
+        <div class="msg-eyebrow">Commerce</div>
+        <div class="msg-title">Serendipity for Online Retail</div>
+        <div class="msg-body">Discovery without search. A white-label layer that lets customers browse and find what they didn't know they wanted — alongside existing retail infrastructure.</div>
+      </div>
+      <div class="msg" onclick="window.location='story.html'">
+        <div class="msg-eyebrow">Studio</div>
+        <div class="msg-title">Design that works differently</div>
+        <div class="msg-body">Systems built from the user outward. Unconventional, accessible, effective. Users have loved them. IT departments have not.</div>
+      </div>
+    </div>
+
+    <div class="footer-area">
+      <span>Aude · South of France</span>
+      <a href="mailto:craig@jetenvoieca.com">craig@jetenvoieca.com</a>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>
