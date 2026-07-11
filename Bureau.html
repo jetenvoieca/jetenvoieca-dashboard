@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jetenvoieca — Bureau</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--cream:#FAF7F2;--ivory:#F3EDE3;--noir:#1A1714;--muted:#7A7066;--gold:#C4A028;--pink:#E8698A;--border:rgba(26,23,20,0.12)}
+body{font-family:'Jost',sans-serif;background:#EDECE8;color:var(--noir);font-size:14px;font-weight:300;height:100vh;overflow:hidden}
+button,input,textarea,select{font-family:'Jost',sans-serif;font-size:13px;font-weight:300}
+
+/* THREE COLUMN LAYOUT */
+.shell{display:grid;grid-template-columns:1fr 500px 220px;gap:10px;padding:10px;height:100vh;overflow:hidden}
+
+/* LEFT — live preview */
+.preview-pane{background:white;border-radius:8px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08);display:flex;flex-direction:column}
+.preview-bar{height:36px;background:var(--noir);display:flex;align-items:center;padding:0 12px;gap:8px;flex-shrink:0;border-radius:8px 8px 0 0}
+.preview-dot{width:10px;height:10px;border-radius:50%}
+.preview-url{font-size:11px;color:rgba(255,255,255,.45);flex:1;text-align:center;letter-spacing:.04em}
+.preview-refresh{background:none;border:none;color:rgba(255,255,255,.45);cursor:pointer;font-size:15px;padding:4px}
+.preview-refresh:hover{color:white}
+.preview-pane iframe{flex:1;width:100%;border:none;display:block}
+
+/* MIDDLE — edit form */
+.edit-pane{background:white;border-radius:8px;overflow-y:auto;box-shadow:0 2px 12px rgba(0,0,0,.08)}
+.edit-inner{padding:28px 28px 48px}
+.edit-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;text-align:center;color:var(--muted);padding:40px}
+.edit-empty-logo{font-family:'Cormorant Garamond',serif;font-size:52px;font-style:italic;color:var(--gold);margin-bottom:14px;letter-spacing:.04em}
+.edit-empty p{font-size:13px;line-height:1.8;max-width:240px}
+.edit-title{font-family:'Cormorant Garamond',serif;font-size:26px;font-weight:300;margin-bottom:4px}
+.edit-sub{font-size:12px;color:var(--muted);margin-bottom:22px;letter-spacing:.02em}
+.sticky-hd{position:sticky;top:0;z-index:5;background:white;margin:-28px -28px 20px;padding:20px 28px 14px;border-bottom:1px solid var(--border)}
+
+/* RIGHT — nav */
+.nav-pane{background:#231F1B;border-radius:8px;box-shadow:0 2px 12px rgba(0,0,0,.08);display:flex;flex-direction:column;overflow:hidden}
+.nav-inner{flex:1;overflow-y:auto;padding:12px}
+
+/* Publish */
+.action-row{margin-bottom:12px}
+.btn-publish{width:100%;padding:10px;background:transparent;color:rgba(255,255,255,.5);border:1px solid rgba(255,255,255,.15);font-size:11px;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;border-radius:5px;transition:all .2s;font-family:'Jost',sans-serif;font-weight:500}
+.btn-publish:hover{border-color:var(--gold);color:var(--gold)}
+.btn-publish.pending{background:var(--gold);color:white;border-color:var(--gold);animation:pulse 2.4s ease-in-out infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(196,160,40,.5)}50%{box-shadow:0 0 0 6px rgba(196,160,40,0)}}
+.publish-status{font-size:10px;color:rgba(255,255,255,.35);text-align:center;margin:5px 0 12px;letter-spacing:.04em;min-height:14px}
+.publish-status.pending{color:#e8c06a}
+
+/* Accordion */
+.acc-group{margin-bottom:3px}
+.acc-hd{width:100%;padding:9px 12px;border:none;border-radius:5px;font-family:'Jost',sans-serif;font-size:11px;font-weight:500;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;display:flex;align-items:center;justify-content:space-between;transition:background .2s,color .2s;background:transparent;color:rgba(255,255,255,.45)}
+.acc-hd:hover{background:rgba(255,255,255,.05);color:rgba(255,255,255,.8)}
+.acc-hd.open{background:rgba(255,255,255,.07);color:#fff}
+.acc-hd .chev{font-size:9px;transition:transform .25s;opacity:.5}
+.acc-hd.open .chev{transform:rotate(180deg);opacity:1}
+.acc-body{overflow:hidden;max-height:0;transition:max-height .3s ease}
+.acc-body.open{max-height:600px}
+.acc-items{padding:3px 0 6px 3px}
+.acc-item{width:100%;padding:8px 12px;border:none;background:transparent;font-family:'Jost',sans-serif;font-size:13px;font-weight:300;color:rgba(255,255,255,.65);text-align:left;cursor:pointer;border-radius:5px;display:flex;align-items:center;gap:8px;transition:background .15s,color .15s;margin-bottom:1px}
+.acc-item:hover{background:rgba(255,255,255,.06);color:#fff}
+.acc-item.active{background:var(--gold);color:white;font-weight:400}
+.nav-divider{height:.5px;background:rgba(255,255,255,.08);margin:8px 3px}
+.nav-wordmark{padding:14px 14px 8px;font-family:'Cormorant Garamond',serif;font-size:13px;font-style:italic;color:rgba(255,255,255,.25);letter-spacing:.08em}
+
+/* Form elements */
+.card{background:var(--ivory);border-radius:6px;padding:16px;margin-bottom:14px}
+.card-title{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--gold);margin-bottom:12px}
+.field{margin-bottom:14px}
+.field:last-child{margin-bottom:0}
+.field label{display:block;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+.field input,.field textarea,.field select{width:100%;padding:9px 12px;border:.5px solid var(--border);background:white;color:var(--noir);outline:none;border-radius:4px;transition:border-color .2s}
+.field input:focus,.field textarea:focus{border-color:var(--gold)}
+.field textarea{resize:vertical;line-height:1.7;min-height:90px}
+.field-hint{font-size:11px;color:var(--muted);margin-top:4px}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+/* Image upload */
+.img-upload{border:1px dashed var(--border);border-radius:4px;background:var(--ivory);padding:14px;text-align:center;cursor:pointer;transition:border-color .2s}
+.img-upload:hover{border-color:var(--gold)}
+.img-upload p{font-size:12px;color:var(--muted);margin-top:6px}
+.img-upload img{max-height:120px;max-width:100%;border-radius:3px;display:block;margin:0 auto}
+
+/* Back link */
+.back-link{background:none;border:none;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);cursor:pointer;padding:0;margin-bottom:14px;display:inline-flex;align-items:center;gap:4px}
+.back-link:hover{color:var(--noir)}
+
+/* Form actions */
+.form-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
+.btn-save{padding:9px 22px;background:var(--noir);color:white;border:none;border-radius:4px;font-size:12px;letter-spacing:.06em;cursor:pointer}
+.btn-save:hover{background:var(--gold)}
+.btn-cancel{padding:9px 16px;border:.5px solid var(--border);background:transparent;border-radius:4px;font-size:12px;color:var(--muted);cursor:pointer}
+
+/* Toast */
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);padding:10px 24px;background:var(--noir);color:white;font-size:13px;border-radius:6px;z-index:999;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap}
+.toast.show{opacity:1}
+.toast.success{background:#2e7d32}
+.toast.error{background:#c0392b}
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- LEFT: Preview -->
+  <div class="preview-pane">
+    <div class="preview-bar">
+      <div class="preview-dot" style="background:#ff5f57"></div>
+      <div class="preview-dot" style="background:#febc2e"></div>
+      <div class="preview-dot" style="background:#28c840"></div>
+      <span class="preview-url" id="preview-url">jetenvoieca.com</span>
+      <button class="preview-refresh" onclick="refreshPreview()" title="Refresh">↺</button>
+    </div>
+    <iframe id="preview" src="https://jetenvoieca.com" title="Site preview"></iframe>
+  </div>
+
+  <!-- MIDDLE: Edit -->
+  <div class="edit-pane" id="edit-pane">
+    <div class="edit-empty">
+      <div class="edit-empty-logo">Jv</div>
+      <p>Select a section from the menu to start editing</p>
+    </div>
+  </div>
+
+  <!-- RIGHT: Nav -->
+  <div class="nav-pane">
+    <div class="nav-inner">
+      <div class="nav-wordmark">Jetenvoieca</div>
+
+      <div class="action-row">
+        <button class="btn-publish" id="btn-publish" onclick="publish()">↑ Publish</button>
+        <div class="publish-status" id="publish-status">All changes published</div>
+      </div>
+
+      <div class="nav-divider"></div>
+
+      <!-- PAGES -->
+      <div class="acc-group">
+        <button class="acc-hd open" id="acc-pages" onclick="toggleAcc('pages')">
+          Pages <span class="chev">▼</span>
+        </button>
+        <div class="acc-body open" id="acc-body-pages">
+          <div class="acc-items">
+            <button class="acc-item" onclick="showView('home')">⌂ Home</button>
+            <button class="acc-item" onclick="showView('story')">◎ Story</button>
+            <button class="acc-item" onclick="showView('contact')">✉ Contact</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="nav-divider"></div>
+
+      <!-- SITES -->
+      <div class="acc-group">
+        <button class="acc-hd" id="acc-sites" onclick="toggleAcc('sites')">
+          Sites <span class="chev">▼</span>
+        </button>
+        <div class="acc-body" id="acc-body-sites">
+          <div class="acc-items">
+            <button class="acc-item" onclick="showView('sites-dashboard')">⊞ All Sites</button>
+            <button class="acc-item" onclick="showView('sites-add')">+ Add Site</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- DOMAINS -->
+      <div class="acc-group">
+        <button class="acc-hd" id="acc-domains" onclick="toggleAcc('domains')">
+          Domains <span class="chev">▼</span>
+        </button>
+        <div class="acc-body" id="acc-body-domains">
+          <div class="acc-items">
+            <button class="acc-item" onclick="showView('domains-unassigned')">⚑ Unassigned</button>
+            <button class="acc-item" onclick="showView('domains-all')">◈ All Domains</button>
+            <button class="acc-item" onclick="showView('domains-sync')">↻ NC Sync</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="nav-divider"></div>
+
+      <!-- SETTINGS -->
+      <div class="acc-group">
+        <button class="acc-hd" id="acc-settings" onclick="toggleAcc('settings')">
+          Settings <span class="chev">▼</span>
+        </button>
+        <div class="acc-body" id="acc-body-settings">
+          <div class="acc-items">
+            <button class="acc-item" onclick="showView('settings-site')">⚙ Site Settings</button>
+            <button class="acc-item" onclick="showView('settings-github')">⚙ GitHub / Deploy</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── STATE ────────────────────────────────────────────────────────────────────
+var state = {
+  hasUnsaved: false,
+  currentView: null,
+  content: loadContent()
+};
+
+function loadContent() {
+  try { return JSON.parse(localStorage.getItem('jv_content') || '{}'); } catch(e) { return {}; }
+}
+
+function saveContent() {
+  try { localStorage.setItem('jv_content', JSON.stringify(state.content)); } catch(e) {}
+}
+
+function markUnsaved() {
+  state.hasUnsaved = true;
+  var btn = document.getElementById('btn-publish');
+  var status = document.getElementById('publish-status');
+  btn.classList.add('pending');
+  status.textContent = 'Unsaved changes';
+  status.className = 'publish-status pending';
+}
+
+function markSaved() {
+  state.hasUnsaved = false;
+  var btn = document.getElementById('btn-publish');
+  var status = document.getElementById('publish-status');
+  btn.classList.remove('pending');
+  status.textContent = 'All changes saved';
+  status.className = 'publish-status';
+}
+
+function publish() {
+  // For now saves to localStorage and toasts — GitHub push to follow
+  saveContent();
+  markSaved();
+  toast('Saved ✓', 'success');
+  refreshPreview();
+}
+
+function toast(msg, type) {
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (type ? ' ' + type : '');
+  setTimeout(function() { t.className = 'toast'; }, 3000);
+}
+
+// ── ACCORDION ────────────────────────────────────────────────────────────────
+function toggleAcc(id) {
+  var hd = document.getElementById('acc-' + id);
+  var body = document.getElementById('acc-body-' + id);
+  hd.classList.toggle('open');
+  body.classList.toggle('open');
+}
+
+// ── PREVIEW ──────────────────────────────────────────────────────────────────
+function refreshPreview() {
+  var iframe = document.getElementById('preview');
+  iframe.src = iframe.src;
+}
+
+// ── ACTIVE NAV ───────────────────────────────────────────────────────────────
+function setActiveNav(view) {
+  document.querySelectorAll('.acc-item').forEach(function(b) { b.classList.remove('active'); });
+  document.querySelectorAll('.acc-item').forEach(function(b) {
+    if (b.getAttribute('onclick') && b.getAttribute('onclick').indexOf("'" + view + "'") > -1) {
+      b.classList.add('active');
+    }
+  });
+}
+
+// ── VIEWS ────────────────────────────────────────────────────────────────────
+function showView(view) {
+  state.currentView = view;
+  setActiveNav(view);
+  var pane = document.getElementById('edit-pane');
+
+  if (view === 'home') pane.innerHTML = viewHome();
+  else if (view === 'story') pane.innerHTML = viewStory();
+  else if (view === 'contact') pane.innerHTML = viewContact();
+  else if (view === 'sites-dashboard') pane.innerHTML = viewSites();
+  else if (view === 'domains-all' || view === 'domains-unassigned') pane.innerHTML = viewDomains(view);
+  else if (view === 'domains-sync') pane.innerHTML = viewNcSync();
+  else if (view === 'settings-github') pane.innerHTML = viewGitHub();
+  else if (view === 'settings-site') pane.innerHTML = viewSiteSettings();
+  else pane.innerHTML = '<div class="edit-inner"><p style="color:var(--muted);font-size:13px;margin-top:40px;text-align:center">Coming soon</p></div>';
+
+  wireView(view);
+}
+
+// ── HOME PAGE EDITOR ─────────────────────────────────────────────────────────
+function viewHome() {
+  var c = state.content.home || {};
+  return '<div class="edit-inner">' +
+    '<div class="sticky-hd"><div class="edit-title">Home Page</div><div class="edit-sub">Public-facing landing page content</div></div>' +
+
+    '<div class="card"><div class="card-title">Three Message Blocks</div>' +
+
+    '<div class="field"><label>Block 1 — Eyebrow</label><input id="h-e1" value="' + esc(c.eyebrow1||'Artists') + '"></div>' +
+    '<div class="field"><label>Block 1 — Title</label><input id="h-t1" value="' + esc(c.title1||'Websites for Artists') + '"></div>' +
+    '<div class="field"><label>Block 1 — Body</label><textarea id="h-b1">' + esc(c.body1||'Beautiful, minimal portfolio sites. Built to show the work, not obscure it. Every site different. Every artist served.') + '</textarea></div>' +
+
+    '<div class="field"><label>Block 2 — Eyebrow</label><input id="h-e2" value="' + esc(c.eyebrow2||'Commerce') + '"></div>' +
+    '<div class="field"><label>Block 2 — Title</label><input id="h-t2" value="' + esc(c.title2||'Serendipity for Online Retail') + '"></div>' +
+    '<div class="field"><label>Block 2 — Body</label><textarea id="h-b2">' + esc(c.body2||'Discovery without search. A white-label layer that lets customers browse and find what they didn\'t know they wanted.') + '</textarea></div>' +
+
+    '<div class="field"><label>Block 3 — Eyebrow</label><input id="h-e3" value="' + esc(c.eyebrow3||'Studio') + '"></div>' +
+    '<div class="field"><label>Block 3 — Title</label><input id="h-t3" value="' + esc(c.title3||'Design that works differently') + '"></div>' +
+    '<div class="field"><label>Block 3 — Body</label><textarea id="h-b3">' + esc(c.body3||'Systems built from the user outward. Unconventional, accessible, effective. Users have loved them. IT departments less so.') + '</textarea></div>' +
+    '</div>' +
+
+    '<div class="card"><div class="card-title">Footer</div>' +
+    '<div class="field-row">' +
+    '<div class="field"><label>Location</label><input id="h-location" value="' + esc(c.location||'Aude · South of France') + '"></div>' +
+    '<div class="field"><label>Email</label><input id="h-email" value="' + esc(c.email||'craig@jetenvoieca.com') + '"></div>' +
+    '</div></div>' +
+
+    '<div class="form-actions"><button class="btn-save" onclick="saveHome()">Save</button></div>' +
+    '</div>';
+}
+
+function saveHome() {
+  state.content.home = {
+    eyebrow1: val('h-e1'), title1: val('h-t1'), body1: val('h-b1'),
+    eyebrow2: val('h-e2'), title2: val('h-t2'), body2: val('h-b2'),
+    eyebrow3: val('h-e3'), title3: val('h-t3'), body3: val('h-b3'),
+    location: val('h-location'), email: val('h-email')
+  };
+  saveContent(); markUnsaved();
+  toast('Home page saved', 'success');
+}
+
+// ── STORY PAGE EDITOR ─────────────────────────────────────────────────────────
+function viewStory() {
+  var c = state.content.story || {};
+  return '<div class="edit-inner">' +
+    '<div class="sticky-hd"><div class="edit-title">Story Page</div><div class="edit-sub">Your story and background</div></div>' +
+
+    '<div class="card"><div class="card-title">Headline</div>' +
+    '<div class="field"><label>Page Title</label><input id="s-title" value="' + esc(c.title||'Design that happens for a reason') + '"></div>' +
+    '<div class="field"><label>Subtitle</label><input id="s-sub" value="' + esc(c.subtitle||'South of France · Since 2020') + '"></div>' +
+    '</div>' +
+
+    '<div class="card"><div class="card-title">The Story</div>' +
+    '<div class="field"><label>Chapter 1 — The Accident</label><textarea id="s-c1" rows="6">' + esc(c.chapter1||'We were caught on holiday in the South of France by the lockdown — the confinement. During which the house next to the one we were renting came up for sale. So we bought it and stayed. We believe things sort of happen for a reason.') + '</textarea></div>' +
+    '<div class="field"><label>Chapter 2 — The Work</label><textarea id="s-c2" rows="6">' + esc(c.chapter2||'My passion for design, practicability and useability have driven me all my life. I designed systems for lawyers, banks, car leasing, government departments — successfully in the 1990s. The IT departments hated them because they didn\'t conform. Users loved them. In one government department they had to rotate users on to our system to avoid a strike.') + '</textarea></div>' +
+    '<div class="field"><label>Chapter 3 — The Philosophy</label><textarea id="s-c3" rows="5">' + esc(c.chapter3||'Different and better are key to me. I try to keep all functionality accessible — deep menu structures I hate. Minimalist, elegant, effective. Content left, actions right.') + '</textarea></div>' +
+    '</div>' +
+
+    '<div class="form-actions"><button class="btn-save" onclick="saveStory()">Save</button></div>' +
+    '</div>';
+}
+
+function saveStory() {
+  state.content.story = {
+    title: val('s-title'), subtitle: val('s-sub'),
+    chapter1: val('s-c1'), chapter2: val('s-c2'), chapter3: val('s-c3')
+  };
+  saveContent(); markUnsaved();
+  toast('Story page saved', 'success');
+}
+
+// ── CONTACT PAGE EDITOR ───────────────────────────────────────────────────────
+function viewContact() {
+  var c = state.content.contact || {};
+  return '<div class="edit-inner">' +
+    '<div class="sticky-hd"><div class="edit-title">Contact Page</div><div class="edit-sub">Contact details and message</div></div>' +
+
+    '<div class="card"><div class="card-title">Contact Details</div>' +
+    '<div class="field"><label>Email</label><input id="c-email" value="' + esc(c.email||'craig@jetenvoieca.com') + '"></div>' +
+    '<div class="field"><label>Location</label><input id="c-location" value="' + esc(c.location||'Near Narbonne, Aude, South of France') + '"></div>' +
+    '<div class="field"><label>Intro Message</label><textarea id="c-intro" rows="4">' + esc(c.intro||'Whether you\'re an artist looking for a website, a retailer interested in serendipitous discovery, or simply want to talk design — get in touch.') + '</textarea></div>' +
+    '</div>' +
+
+    '<div class="form-actions"><button class="btn-save" onclick="saveContact()">Save</button></div>' +
+    '</div>';
+}
+
+function saveContact() {
+  state.content.contact = {
+    email: val('c-email'), location: val('c-location'), intro: val('c-intro')
+  };
+  saveContent(); markUnsaved();
+  toast('Contact page saved', 'success');
+}
+
+// ── SITES DASHBOARD ───────────────────────────────────────────────────────────
+function viewSites() {
+  var sites = [];
+  try { sites = JSON.parse(localStorage.getItem('jv_sites') || '[]'); } catch(e) {}
+  var rows = sites.map(function(s) {
+    return '<div style="display:flex;align-items:center;padding:10px 0;border-bottom:.5px solid var(--border);gap:12px">' +
+      '<div style="flex:1"><div style="font-family:\'Cormorant Garamond\',serif;font-size:15px;font-style:italic">' + esc(s.name) + '</div>' +
+      '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + esc(s.url||'') + '</div></div>' +
+      (s.sub_amount ? '<span style="font-size:11px;color:var(--gold)">£' + esc(s.sub_amount) + '/mo</span>' : '') +
+      (s.verified ? '<span style="width:18px;height:18px;border-radius:50%;background:#2e7d32;color:white;font-size:11px;display:flex;align-items:center;justify-content:center">✓</span>' : '') +
+      '</div>';
+  }).join('');
+
+  return '<div class="edit-inner">' +
+    '<div class="sticky-hd"><div class="edit-title">Sites</div>' +
+    '<div class="edit-sub">' + sites.length + ' client sites</div></div>' +
+    (sites.length === 0
+      ? '<p style="color:var(--muted);font-size:13px;text-align:center;margin-top:40px">No sites yet — add one from the dashboard</p>'
+      : '<div>' + rows + '</div>') +
+    '<div class="form-actions"><a href="index.html" target="_blank" style="padding:9px 22px;background:var(--noir);color:white;border-radius:4px;font-size:12px;text-decoration:none;letter-spacing:.04em">Open Sites Dashboard →</a></div>' +
+    '</div>';
+}
+
+// ── DOMAINS VIEW ──────────────────────────────────────────────────────────────
+function viewDomains(view) {
+  var ncData = null;
+  try { ncData = JSON.parse(localStorage.getItem('nc_domains') || 'null'); } catch(e) {}
+  if (!ncData) {
+    return '<div class="edit-inner"><div class="sticky-hd"><div class="edit-title">Domains</div></div>' +
+      '<p style="color:var(--muted);font-size:13px;text-align:center;margin-top:40px">No domain data yet.<br>Use NC Sync to import your Namecheap domains.</p></div>';
+  }
+
+  var sites = [];
+  try { sites = JSON.parse(localStorage.getItem('jv_sites') || '[]'); } catch(e) {}
+
+  function hostname(url) {
+    try { return new URL(url).hostname.replace('www.',''); } catch(e) { return url; }
+  }
+
+  function formatExpiry(d) {
+    var dt = new Date(d);
+    var m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return dt.getDate() + ' ' + m[dt.getMonth()] + ' ' + dt.getFullYear();
+  }
+
+  function expiryColor(d) {
+    var days = (new Date(d) - new Date()) / (1000*60*60*24);
+    return days < 30 ? '#c0392b' : days < 90 ? '#e67e22' : 'var(--muted)';
+  }
+
+  var siteHosts = sites.map(function(s) { return hostname(s.url).toLowerCase(); });
+  var all = ncData.domains.slice().sort(function(a,b){ return new Date(a.expiry)-new Date(b.expiry); });
+  var unassigned = all.filter(function(d){ return !siteHosts.includes(d.name.toLowerCase()); });
+  var list = view === 'domains-unassigned' ? unassigned : all;
+  var title = view === 'domains-unassigned' ? 'Unassigned Domains' : 'All Domains';
+
+  var rows = list.map(function(d) {
+    var color = expiryColor(d.expiry);
+    var assigned = sites.find(function(s){ return hostname(s.url).toLowerCase() === d.name.toLowerCase(); });
+    return '<div style="display:flex;align-items:center;padding:9px 0;border-bottom:.5px solid var(--border);gap:10px">' +
+      '<a href="http://'+d.name+'" target="_blank" style="flex:1;font-size:13px;color:var(--noir);text-decoration:none">' + d.name + '</a>' +
+      (assigned ? '<span style="font-size:11px;color:var(--muted)">' + esc(assigned.name) + '</span>' : '') +
+      '<span style="font-size:11px;color:'+color+'">' + formatExpiry(d.expiry) + '</span>' +
+      '</div>';
+  }).join('');
+
+  return '<div class="edit-inner">' +
+    '<div class="sticky-hd"><div class="edit-title">' + title + '</div>' +
+    '<div class="edit-sub">' + list.length + ' domains · fetched ' + new Date(ncData.fetched).toLocaleDateString('en-GB') + '</div></div>' +
+    (list.length === 0 ? '<p style="color:var(--muted);font-size:13px;text-align:center;margin-top:40px">✓ All domains assigned</p>' : '<div>' + rows + '</div>') +
+    '</div>';
+}
+
+// ── NC SYNC VIEW ──────────────────────────────────────────────────────────────
+function viewNcSync() {
+  var u = localStorage.getItem('nc_username') || '';
+  var ip = localStorage.getItem('nc_ip') || '';
+  return '<div class="edit-inner">' +
+    '<div class="sticky-hd"><div class="edit-title">Namecheap Sync</div><div class="edit-sub">Import domain data from your local script</div></div>' +
+
+    '<div class="card"><div class="card-title">Credentials</div>' +
+    '<div class="field"><label>Username</label><input id="nc-u" value="' + esc(u) + '"></div>' +
+    '<div class="field"><label>Whitelisted IP</label><input id="nc-ip" value="' + esc(ip) + '"></div>' +
+    '<div class="field-hint" style="margin-bottom:14px">Your API key is stored separately for security.</div>' +
+    '<div class="field"><label>API Key</label><input id="nc-k" type="password" placeholder="paste key here"></div>' +
+    '<div class="form-actions" style="margin-top:10px"><button class="btn-save" onclick="saveNcCreds()">Save Credentials</button></div>' +
+    '</div>' +
+
+    '<div class="card"><div class="card-title">Import Domain Data</div>' +
+    '<p style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.6">Run <code>node fetch-domains.js</code> in Terminal to generate <code>namecheap-domains.json</code>, then import it here.</p>' +
+    '<button class="btn-save" onclick="document.getElementById(\'nc-file\').click()" style="width:100%;text-align:center">↑ Import namecheap-domains.json</button>' +
+    '<input type="file" id="nc-file" accept=".json" style="display:none" onchange="importDomains(this)">' +
+    '<div id="nc-status" style="font-size:12px;color:var(--muted);margin-top:10px;text-align:center"></div>' +
+    '</div></div>';
+}
+
+function saveNcCreds() {
+  var u = document.getElementById('nc-u').value.trim();
+  var k = document.getElementById('nc-k').value.trim();
+  var ip = document.getElementById('nc-ip').value.trim();
+  if (u) localStorage.setItem('nc_username', u);
+  if (k) localStorage.setItem('nc_apikey', k);
+  if (ip) localStorage.setItem('nc_ip', ip);
+  toast('Credentials saved', 'success');
+}
+
+function importDomains(input) {
+  var file = input.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var data = JSON.parse(e.target.result);
+      if (!data.domains) throw new Error('Invalid format');
+      localStorage.setItem('nc_domains', JSON.stringify(data));
+
+      var sites = [];
+      try { sites = JSON.parse(localStorage.getItem('jv_sites') || '[]'); } catch(ex) {}
+      function hostname(url) { try { return new URL(url).hostname.replace('www.',''); } catch(ex) { return url; } }
+      var matched = 0;
+      var siteHosts = sites.map(function(s){ return hostname(s.url).toLowerCase(); });
+      var unassigned = data.domains.filter(function(d){ return !siteHosts.includes(d.name.toLowerCase()); });
+
+      sites = sites.map(function(s) {
+        var host = hostname(s.url);
+        var match = data.domains.find(function(d){ return d.name.toLowerCase() === host.toLowerCase(); });
+        if (match) { matched++; return Object.assign({}, s, { nc_expiry: match.expiry, nc_synced: new Date().toISOString(), domain_owned: true }); }
+        return Object.assign({}, s, { domain_owned: false });
+      });
+      localStorage.setItem('jv_sites', JSON.stringify(sites));
+
+      var status = document.getElementById('nc-status');
+      if (status) {
+        status.style.color = '#2e7d32';
+        status.textContent = '✓ ' + matched + ' cards matched · ' + data.domains.length + ' domains · ' + unassigned.length + ' unassigned';
+      }
+      input.value = '';
+      toast('Domains imported ✓', 'success');
+    } catch(err) {
+      toast('Import failed: ' + err.message, 'error');
+      input.value = '';
+    }
+  };
+  reader.readAsText(file);
+}
+
+// ── GITHUB SETTINGS ───────────────────────────────────────────────────────────
+function viewGitHub() {
+  var token = localStorage.getItem('gh_token') ? '••••••••••••' : '';
+  var repo = localStorage.getItem('gh_repo') || '';
+  return '<div class="edit-inner">' +
+    '<div class="sticky-hd"><div class="edit-title">GitHub & Deploy</div><div class="edit-sub">Connect to publish content to your live site</div></div>' +
+    '<div class="card"><div class="card-title">GitHub Connection</div>' +
+    '<div class="field"><label>Repository (owner/repo)</label><input id="gh-repo" value="' + esc(repo) + '" placeholder="e.g. craigsmith/jetenvoieca-dashboard"></div>' +
+    '<div class="field"><label>Personal Access Token</label><input id="gh-token" type="password" placeholder="' + (token || 'paste token here') + '"></div>' +
+    '<div class="field-hint" style="margin-bottom:14px">Token needs Contents: read & write permission. Stored only in your browser.</div>' +
+    '<div class="form-actions"><button class="btn-save" onclick="saveGhSettings()">Save</button></div>' +
+    '</div></div>';
+}
+
+function saveGhSettings() {
+  var repo = document.getElementById('gh-repo').value.trim();
+  var token = document.getElementById('gh-token').value.trim();
+  if (repo) localStorage.setItem('gh_repo', repo);
+  if (token) localStorage.setItem('gh_token', token);
+  toast('GitHub settings saved', 'success');
+}
+
+// ── SITE SETTINGS ─────────────────────────────────────────────────────────────
+function viewSiteSettings() {
+  var c = state.content.settings || {};
+  return '<div class="edit-inner">' +
+    '<div class="sticky-hd"><div class="edit-title">Site Settings</div><div class="edit-sub">Global site configuration</div></div>' +
+    '<div class="card"><div class="card-title">Identity</div>' +
+    '<div class="field"><label>Site Name</label><input id="ss-name" value="' + esc(c.name||'Jetenvoieca') + '"></div>' +
+    '<div class="field"><label>Tagline</label><input id="ss-tag" value="' + esc(c.tagline||'Design · Artists · Commerce · Aude') + '"></div>' +
+    '<div class="field"><label>Primary Email</label><input id="ss-email" value="' + esc(c.email||'craig@jetenvoieca.com') + '"></div>' +
+    '<div class="field"><label>Location</label><input id="ss-loc" value="' + esc(c.location||'Near Narbonne, Aude, South of France') + '"></div>' +
+    '</div>' +
+    '<div class="form-actions"><button class="btn-save" onclick="saveSiteSettings()">Save</button></div>' +
+    '</div>';
+}
+
+function saveSiteSettings() {
+  state.content.settings = {
+    name: val('ss-name'), tagline: val('ss-tag'),
+    email: val('ss-email'), location: val('ss-loc')
+  };
+  saveContent(); markUnsaved();
+  toast('Settings saved', 'success');
+}
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+function wireView(view) { /* fields wire via inline oninput/onclick */ }
+function val(id) { var el = document.getElementById(id); return el ? el.value : ''; }
+function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+window.onbeforeunload = function(e) {
+  if (state.hasUnsaved) { e.preventDefault(); e.returnValue = ''; return ''; }
+};
+</script>
+</body>
+</html>
