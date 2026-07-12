@@ -554,8 +554,10 @@ function renderSitesRows(sites) {
 
   html += sites.map(function(s) {
     var open = expandedSiteId === s.id;
-    var row = '<div onclick="selectSite(\'' + s.id + '\')" style="display:flex;align-items:center;padding:10px 0;border-bottom:.5px solid var(--border);gap:10px;cursor:pointer;' +
-      (open ? 'background:var(--ivory);margin:0 -8px;padding-left:8px;padding-right:8px;border-radius:4px 4px 0 0' : '') + '">' +
+    var row = '<div onclick="selectSite(\'' + s.id + '\')" style="display:flex;align-items:center;padding:10px 0;gap:10px;cursor:pointer;' +
+      (open
+        ? 'background:var(--ivory);margin:0 -8px;padding-left:8px;padding-right:8px;border-radius:4px 4px 0 0'
+        : 'border-bottom:.5px solid var(--border)') + '">' +
       '<div style="flex:1;min-width:0">' +
       '<div style="font-family:\'Cormorant Garamond\',serif;font-size:15px;font-style:italic">' + esc(s.name) + '</div>' +
       '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + esc(s.url||'') + '</div></div>' +
@@ -572,18 +574,21 @@ function renderSitesRows(sites) {
 }
 
 // Read-only detail panel, shown alongside the image preview when a row is
-// clicked. Edit (below) is the further step into the actual edit form.
+// clicked. Same horizontal edges as the row above it, so it reads as one
+// continuous panel. Edit is the further step into the actual edit form.
 function renderSiteDetail(s) {
-  return '<div onclick="event.stopPropagation()" style="padding:14px 12px 18px;background:var(--ivory);border-radius:0 0 4px 4px;margin-bottom:2px">' +
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:12px;margin-bottom:14px">' +
+  return '<div onclick="event.stopPropagation()" style="margin:0 -8px;padding:10px 8px 12px;background:var(--ivory);border-radius:0 0 4px 4px;border-bottom:.5px solid var(--border)">' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:12px;margin-bottom:10px">' +
     '<div><div style="color:var(--muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px">Email</div>' + (esc(s.email) || '—') + '</div>' +
     '<div><div style="color:var(--muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px">URL</div><a href="' + esc(s.url) + '" target="_blank" style="color:var(--noir)">' + esc(s.url) + '</a></div>' +
     '<div><div style="color:var(--muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px">Payment</div>' + (esc(s.sub_method) || '—') + (s.sub_amount ? ' · £' + esc(s.sub_amount) + '/mo' : '') + '</div>' +
     '<div><div style="color:var(--muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px">Domain</div>' + (s.domain_owned ? 'Owned via Namecheap' : 'Not tracked') + (s.nc_expiry ? ' · exp ' + new Date(s.nc_expiry).toLocaleDateString('en-GB') : '') + '</div>' +
     '</div>' +
-    (s.notes ? '<div style="font-size:12px;margin-bottom:14px"><div style="color:var(--muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px">Notes</div>' + esc(s.notes).replace(/\n/g, '<br>') + '</div>' : '') +
-    '<button class="btn-cancel" onclick="startEditSite(\'' + s.id + '\')">Edit</button>' +
-    '</div>';
+    (s.notes ? '<div style="font-size:12px;margin-bottom:10px"><div style="color:var(--muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px">Notes</div>' + esc(s.notes).replace(/\n/g, '<br>') + '</div>' : '') +
+    '<div style="display:flex;align-items:center;justify-content:space-between">' +
+    '<button class="btn-cancel" style="padding:7px 13px;font-size:10px" onclick="startEditSite(\'' + s.id + '\')">Edit</button>' +
+    '<button onclick="selectSite(\'' + s.id + '\')" title="Close" style="background:none;border:none;color:var(--muted);font-size:16px;line-height:1;cursor:pointer;padding:4px 6px">×</button>' +
+    '</div></div>';
 }
 
 // Inline edit form shown after clicking Edit on a site row's detail panel
@@ -1008,4 +1013,4 @@ window.onbeforeunload = function(e) {
 loadFromGitHub(true);
 </script>
 </body>
-</html
+</html>
