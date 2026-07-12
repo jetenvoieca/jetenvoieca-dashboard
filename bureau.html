@@ -111,6 +111,13 @@ button,input,textarea,select{font-family:'Jost',sans-serif;font-size:13px;font-w
       <button class="preview-refresh" onclick="refreshPreview()" title="Refresh">Refresh</button>
     </div>
     <iframe id="preview" src="https://jetenvoieca.com" title="Site preview"></iframe>
+    <div id="preview-image-wrap" style="display:none;flex:1;align-items:center;justify-content:center;padding:60px;overflow:auto;background:var(--cream)">
+      <img id="preview-image" style="display:none;max-width:70%;max-height:70%;object-fit:contain;border-radius:6px;box-shadow:0 10px 34px rgba(0,0,0,.14)">
+      <div id="preview-image-fallback" style="display:none;flex-direction:column;align-items:center;gap:14px">
+        <img id="preview-image-favicon" style="width:56px;height:56px;border-radius:50%;box-shadow:0 2px 10px rgba(0,0,0,.12)">
+        <p id="preview-image-domain" style="font-size:13px;color:var(--muted);letter-spacing:.02em"></p>
+      </div>
+    </div>
   </div>
 
   <!-- MIDDLE: Edit -->
@@ -143,6 +150,7 @@ button,input,textarea,select{font-family:'Jost',sans-serif;font-size:13px;font-w
             <button class="acc-item" onclick="showView('home')">Home</button>
             <button class="acc-item" onclick="showView('story')">Story</button>
             <button class="acc-item" onclick="showView('contact')">Contact</button>
+            <button class="acc-item" onclick="showView('settings-site')">Site Settings</button>
           </div>
         </div>
       </div>
@@ -157,7 +165,6 @@ button,input,textarea,select{font-family:'Jost',sans-serif;font-size:13px;font-w
         <div class="acc-body" id="acc-body-sites">
           <div class="acc-items">
             <button class="acc-item" onclick="showView('sites-dashboard')">All Sites</button>
-            <button class="acc-item" onclick="showView('sites-add')">Add Site</button>
           </div>
         </div>
       </div>
@@ -172,20 +179,6 @@ button,input,textarea,select{font-family:'Jost',sans-serif;font-size:13px;font-w
             <button class="acc-item" onclick="showView('domains-unassigned')">Unassigned</button>
             <button class="acc-item" onclick="showView('domains-all')">All Domains</button>
             <button class="acc-item" onclick="showView('domains-sync')">NC Sync</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="nav-divider"></div>
-
-      <!-- SETTINGS -->
-      <div class="acc-group">
-        <button class="acc-hd" id="acc-settings" onclick="toggleAcc('settings')">
-          Settings <span class="chev">▼</span>
-        </button>
-        <div class="acc-body" id="acc-body-settings">
-          <div class="acc-items">
-            <button class="acc-item" onclick="showView('settings-site')">Site Settings</button>
           </div>
         </div>
       </div>
@@ -337,8 +330,13 @@ function refreshPreview() {
 
 function setPreview(mode) {
   var iframe = document.getElementById('preview');
+  var wrap = document.getElementById('preview-image-wrap');
   var urlLabel = document.getElementById('preview-url');
   previewMode = mode;
+
+  wrap.style.display = 'none';
+  iframe.style.display = '';
+
   if (mode === 'dashboard') {
     iframe.src = '/dashboard.html';
     urlLabel.textContent = 'jetenvoieca.com/dashboard';
@@ -351,7 +349,40 @@ function setPreview(mode) {
 }
 
 function toggleDashboard() {
+  expandedSiteId = null;
+  editingSiteId = null;
   setPreview(previewMode === 'dashboard' ? 'site' : 'dashboard');
+  refreshSitesList();
+}
+
+// Shows a single site's screenshot in the preview pane, generously spaced —
+// no grid, no page chrome, just the image (falls back to favicon + domain
+// if no screenshot is available).
+function showSiteImage(site) {
+  var iframe = document.getElementById('preview');
+  var wrap = document.getElementById('preview-image-wrap');
+  var img = document.getElementById('preview-image');
+  var fallback = document.getElementById('preview-image-fallback');
+  var urlLabel = document.getElementById('preview-url');
+
+  iframe.style.display = 'none';
+  wrap.style.display = 'flex';
+  urlLabel.textContent = hostnameOf(site.url);
+
+  img.style.display = '';
+  fallback.style.display = 'none';
+  img.onerror = function() {
+    img.style.display = 'none';
+    fallback.style.display = 'flex';
+    document.getElementById('preview-image-favicon').src = 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(site.url) + '&sz=64';
+    document.getElementById('preview-image-domain').textContent = hostnameOf(site.url);
+  };
+  img.src = site.image || ('https://s0.wordpress.com/mshots/v1/' + encodeURIComponent(site.url) + '?w=1000&h=700');
+  img.alt = site.name;
+}
+
+function hostnameOf(url) {
+  try { return new URL(url).hostname.replace('www.', ''); } catch (e) { return url; }
 }
 
 // ── ACTIVE NAV ───────────────────────────────────────────────────────────────
@@ -374,7 +405,6 @@ function showView(view) {
   else if (view === 'story') pane.innerHTML = viewStory();
   else if (view === 'contact') pane.innerHTML = viewContact();
   else if (view === 'sites-dashboard') { pane.innerHTML = viewSites(); setPreview('dashboard'); }
-  else if (view === 'sites-add') { addingSite = true; pane.innerHTML = viewSites(); setPreview('dashboard'); }
   else if (view === 'domains-all' || view === 'domains-unassigned') pane.innerHTML = viewDomains(view);
   else if (view === 'domains-sync') pane.innerHTML = viewNcSync();
   else if (view === 'settings-site') pane.innerHTML = viewSiteSettings();
@@ -521,42 +551,27 @@ function renderSitesRows(sites) {
   }
 
   html += sites.map(function(s) {
-    var open = expandedSiteId === s.id;
-    var row = '<div onclick="toggleSiteDetail(\'' + s.id + '\')" style="display:flex;align-items:center;padding:10px 0;border-bottom:.5px solid var(--border);gap:12px;cursor:pointer">' +
-      '<div style="flex:1"><div style="font-family:\'Cormorant Garamond\',serif;font-size:15px;font-style:italic">' + esc(s.name) + '</div>' +
+    var selected = expandedSiteId === s.id;
+    var row = '<div style="display:flex;align-items:center;padding:10px 0;border-bottom:.5px solid var(--border);gap:10px;' +
+      (selected ? 'background:var(--ivory);margin:0 -8px;padding-left:8px;padding-right:8px;border-radius:4px' : '') + '">' +
+      '<div onclick="selectSite(\'' + s.id + '\')" style="flex:1;min-width:0;cursor:pointer">' +
+      '<div style="font-family:\'Cormorant Garamond\',serif;font-size:15px;font-style:italic">' + esc(s.name) + '</div>' +
       '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + esc(s.url||'') + '</div></div>' +
-      (s.sub_amount ? '<span style="font-size:11px;color:var(--gold)">£' + esc(s.sub_amount) + '/mo</span>' : '') +
-      (s.verified ? '<span style="width:18px;height:18px;border-radius:50%;background:#2e7d32;color:white;font-size:11px;display:flex;align-items:center;justify-content:center">✓</span>' : '') +
-      '<span style="color:var(--muted);font-size:10px;transition:transform .2s;transform:rotate(' + (open ? '180' : '0') + 'deg)">▾</span>' +
+      (s.sub_amount ? '<span style="font-size:11px;color:var(--gold);flex-shrink:0">£' + esc(s.sub_amount) + '/mo</span>' : '') +
+      (s.verified ? '<span style="width:18px;height:18px;border-radius:50%;background:#2e7d32;color:white;font-size:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0">✓</span>' : '') +
+      '<button class="btn-cancel" style="padding:5px 12px;font-size:11px;flex-shrink:0" onclick="startEditSite(\'' + s.id + '\')">Edit</button>' +
       '</div>';
-    var panel = '';
-    if (open) panel = (editingSiteId === s.id) ? renderSiteEditForm(s) : renderSiteDetail(s);
+    var panel = (editingSiteId === s.id) ? renderSiteEditForm(s) : '';
     return row + panel;
   }).join('');
 
   return html;
 }
 
-// Read-only detail panel shown when a site row is clicked
-function renderSiteDetail(s) {
-  return '<div onclick="event.stopPropagation()" style="padding:14px 12px 18px;background:var(--ivory);border-radius:0 0 6px 6px;margin-bottom:2px">' +
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:12px;margin-bottom:14px">' +
-    '<div><div style="color:var(--muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px">Email</div>' + (esc(s.email) || '—') + '</div>' +
-    '<div><div style="color:var(--muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px">URL</div><a href="' + esc(s.url) + '" target="_blank" style="color:var(--noir)">' + esc(s.url) + '</a></div>' +
-    '<div><div style="color:var(--muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px">Payment</div>' + (esc(s.sub_method) || '—') + (s.sub_amount ? ' · £' + esc(s.sub_amount) + '/mo' : '') + '</div>' +
-    '<div><div style="color:var(--muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px">Domain</div>' + (s.domain_owned ? 'Owned via Namecheap' : 'Not tracked') + (s.nc_expiry ? ' · exp ' + new Date(s.nc_expiry).toLocaleDateString('en-GB') : '') + '</div>' +
-    '</div>' +
-    (s.notes ? '<div style="font-size:12px;margin-bottom:14px"><div style="color:var(--muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px">Notes</div>' + esc(s.notes).replace(/\n/g, '<br>') + '</div>' : '') +
-    '<div style="display:flex;gap:8px">' +
-    '<button class="btn-save" onclick="startEditSite(\'' + s.id + '\')">Edit</button>' +
-    '<button class="btn-cancel" onclick="deleteSiteInline(\'' + s.id + '\')">Delete</button>' +
-    '</div></div>';
-}
-
-// Inline edit form shown after clicking Edit on a site's detail panel
+// Inline edit form shown after clicking Edit on a site row
 function renderSiteEditForm(s) {
   var id = s.id;
-  return '<div onclick="event.stopPropagation()" style="padding:16px 12px 18px;background:var(--ivory);border-radius:0 0 6px 6px;margin-bottom:2px">' +
+  return '<div style="padding:16px 12px 18px;background:var(--ivory);border-radius:0 0 6px 6px;margin-bottom:2px">' +
     '<div class="field"><label>Name</label><input id="se-name-' + id + '" value="' + esc(s.name) + '"></div>' +
     '<div class="field"><label>Email</label><input id="se-email-' + id + '" value="' + esc(s.email || '') + '"></div>' +
     '<div class="field"><label>URL</label><input id="se-url-' + id + '" value="' + esc(s.url) + '"></div>' +
@@ -575,13 +590,14 @@ function renderSiteEditForm(s) {
     '</label>' +
     '<div class="form-actions">' +
     '<button class="btn-cancel" onclick="cancelEditSite()">Cancel</button>' +
+    '<button class="btn-cancel" onclick="deleteSiteInline(\'' + id + '\')">Delete</button>' +
     '<button class="btn-save" onclick="saveEditSite(\'' + id + '\')">Save</button>' +
     '</div></div>';
 }
 
-// Blank form shown when "+ Add Site" is clicked
+// Blank form shown when "Add Site" is clicked
 function renderAddSiteForm() {
-  return '<div onclick="event.stopPropagation()" style="padding:16px 12px 18px;background:var(--ivory);border-radius:6px;margin-bottom:12px">' +
+  return '<div style="padding:16px 12px 18px;background:var(--ivory);border-radius:6px;margin-bottom:12px">' +
     '<div class="card-title" style="margin-bottom:10px">New Site</div>' +
     '<div class="field"><label>Name</label><input id="sa-name" placeholder="e.g. Louise Dear"></div>' +
     '<div class="field"><label>Email</label><input id="sa-email" placeholder="client@email.com"></div>' +
@@ -621,21 +637,25 @@ function refreshSitesHeader() {
   if (subEl) subEl.textContent = sites.length + ' client sites · £' + mrr(sites).toFixed(0) + '/mo';
 }
 
-function toggleSiteDetail(id) {
+// Clicking a site row shows just its screenshot in the preview pane — the
+// row itself already shows name, URL, price, and verified status.
+function selectSite(id) {
   addingSite = false;
-  if (expandedSiteId === id) {
-    expandedSiteId = null;
-    editingSiteId = null;
-  } else {
-    expandedSiteId = id;
-    editingSiteId = null;
-  }
+  expandedSiteId = id;
+  var sites = [];
+  try { sites = JSON.parse(localStorage.getItem('jv_sites') || '[]'); } catch (e) {}
+  var site = sites.find(function(s) { return s.id === id; });
+  if (site) showSiteImage(site);
   refreshSitesList();
 }
 
 function startEditSite(id) {
   editingSiteId = id;
   expandedSiteId = id;
+  var sites = [];
+  try { sites = JSON.parse(localStorage.getItem('jv_sites') || '[]'); } catch (e) {}
+  var site = sites.find(function(s) { return s.id === id; });
+  if (site) showSiteImage(site);
   refreshSitesList();
 }
 
@@ -669,6 +689,8 @@ function saveEditSite(id) {
   toast('Site updated ✓', 'success');
   refreshSitesList();
   refreshSitesHeader();
+  var updated = sites.find(function(s) { return s.id === id; });
+  if (updated) showSiteImage(updated);
 }
 
 function deleteSiteInline(id) {
@@ -677,8 +699,8 @@ function deleteSiteInline(id) {
   try { sites = JSON.parse(localStorage.getItem('jv_sites') || '[]'); } catch (e) {}
   sites = sites.filter(function(s) { return s.id !== id; });
   localStorage.setItem('jv_sites', JSON.stringify(sites));
-  if (expandedSiteId === id) expandedSiteId = null;
-  if (editingSiteId === id) editingSiteId = null;
+  if (expandedSiteId === id) { expandedSiteId = null; setPreview(previewMode); }
+  editingSiteId = null;
   toast('Site removed', 'success');
   refreshSitesList();
   refreshSitesHeader();
@@ -688,6 +710,7 @@ function startAddSite() {
   addingSite = true;
   expandedSiteId = null;
   editingSiteId = null;
+  setPreview(previewMode);
   refreshSitesList();
 }
 
