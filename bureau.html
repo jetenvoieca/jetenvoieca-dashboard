@@ -368,7 +368,7 @@ function showSiteImage(site) {
   iframe.style.display = 'none';
   wrap.style.display = 'flex';
   wrap.style.cursor = 'pointer';
-  wrap.onclick = function() { window.open(site.url, '_blank'); };
+  wrap.onclick = function() { loadSiteInFrame(site); };
   urlLabel.textContent = hostnameOf(site.url);
 
   img.style.display = '';
@@ -381,6 +381,17 @@ function showSiteImage(site) {
   };
   img.src = site.image || ('https://s0.wordpress.com/mshots/v1/' + encodeURIComponent(site.url) + '?w=1200&h=800');
   img.alt = site.name;
+}
+
+// Clicking the preview image swaps it for the live site, still in the same pane.
+function loadSiteInFrame(site) {
+  var iframe = document.getElementById('preview');
+  var wrap = document.getElementById('preview-image-wrap');
+  var urlLabel = document.getElementById('preview-url');
+  wrap.style.display = 'none';
+  iframe.style.display = '';
+  iframe.src = site.url;
+  urlLabel.textContent = hostnameOf(site.url);
 }
 
 function hostnameOf(url) {
