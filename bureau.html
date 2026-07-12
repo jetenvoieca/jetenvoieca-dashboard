@@ -367,6 +367,8 @@ function showSiteImage(site) {
 
   iframe.style.display = 'none';
   wrap.style.display = 'flex';
+  wrap.style.cursor = 'pointer';
+  wrap.onclick = function() { window.open(site.url, '_blank'); };
   urlLabel.textContent = hostnameOf(site.url);
 
   img.style.display = '';
@@ -377,7 +379,7 @@ function showSiteImage(site) {
     document.getElementById('preview-image-favicon').src = 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(site.url) + '&sz=64';
     document.getElementById('preview-image-domain').textContent = hostnameOf(site.url);
   };
-  img.src = site.image || ('https://s0.wordpress.com/mshots/v1/' + encodeURIComponent(site.url) + '?w=1000&h=700');
+  img.src = site.image || ('https://s0.wordpress.com/mshots/v1/' + encodeURIComponent(site.url) + '?w=1200&h=800');
   img.alt = site.name;
 }
 
@@ -584,6 +586,11 @@ function renderSiteEditForm(s) {
     '</select></div>' +
     '<div class="field"><label>Monthly (£)</label><input id="se-amount-' + id + '" value="' + esc(s.sub_amount || '') + '"></div>' +
     '</div>' +
+    '<div class="field"><label>Thumbnail Image</label>' +
+    (s.image ? '<img src="' + s.image + '" style="max-height:90px;border-radius:4px;margin-bottom:8px;display:block">' : '') +
+    '<input type="file" id="se-image-' + id + '" accept="image/*" style="padding:6px 0">' +
+    '<div class="field-hint">Leave blank to keep the current image</div>' +
+    '</div>' +
     '<div class="field"><label>Notes</label><textarea id="se-notes-' + id + '" rows="3">' + esc(s.notes || '') + '</textarea></div>' +
     '<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin-bottom:16px;cursor:pointer">' +
     '<input type="checkbox" id="se-verified-' + id + '" style="width:auto"' + (s.verified ? ' checked' : '') + '> Verified' +
@@ -606,6 +613,7 @@ function renderAddSiteForm() {
     '<div class="field"><label>Payment Method</label><select id="sa-method"><option value="">Select…</option><option>Stripe</option><option>PayPal</option><option>Bank Transfer</option></select></div>' +
     '<div class="field"><label>Monthly (£)</label><input id="sa-amount" placeholder="e.g. 25"></div>' +
     '</div>' +
+    '<div class="field"><label>Thumbnail Image (optional)</label><input type="file" id="sa-image" accept="image/*" style="padding:6px 0"></div>' +
     '<div class="field"><label>Notes</label><textarea id="sa-notes" rows="3"></textarea></div>' +
     '<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin-bottom:16px;cursor:pointer">' +
     '<input type="checkbox" id="sa-verified" style="width:auto"> Verified' +
@@ -664,11 +672,41 @@ function cancelEditSite() {
   refreshSitesList();
 }
 
-function saveEditSite(id) {
+// Matches dashboard.html's resize settings — same fix (never upscale, was
+// the main cause of blur) and same higher-quality target.
+var IMAGE_MAX_W = 900, IMAGE_MAX_H = 600, IMAGE_QUALITY = 0.85;
+
+function readAndResizeImage(fileInputId) {
+  return new Promise(function(resolve) {
+    var input = document.getElementById(fileInputId);
+    var file = input && input.files && input.files[0];
+    if (!file) { resolve(null); return; }
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      var img = new Image();
+      img.onload = function() {
+        var ratio = Math.min(IMAGE_MAX_W / img.width, IMAGE_MAX_H / img.height, 1); // never upscale
+        var canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * ratio);
+        canvas.height = Math.round(img.height * ratio);
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', IMAGE_QUALITY));
+      };
+      img.onerror = function() { resolve(null); };
+      img.src = e.target.result;
+    };
+    reader.onerror = function() { resolve(null); };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function saveEditSite(id) {
   var name = val('se-name-' + id).trim();
   var url = val('se-url-' + id).trim();
   if (!name || !url) { toast('Name and URL are required', 'error'); return; }
   if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+
+  var newImage = await readAndResizeImage('se-image-' + id);
 
   var sites = [];
   try { sites = JSON.parse(localStorage.getItem('jv_sites') || '[]'); } catch (e) {}
@@ -681,10 +719,16 @@ function saveEditSite(id) {
       sub_method: val('se-method-' + id),
       sub_amount: val('se-amount-' + id).trim(),
       notes: val('se-notes-' + id).trim(),
-      verified: document.getElementById('se-verified-' + id).checked
+      verified: document.getElementById('se-verified-' + id).checked,
+      image: newImage || s.image
     });
   });
-  localStorage.setItem('jv_sites', JSON.stringify(sites));
+  try {
+    localStorage.setItem('jv_sites', JSON.stringify(sites));
+  } catch (err) {
+    toast('Could not save — local storage is full, try a smaller image', 'error');
+    return;
+  }
   editingSiteId = null;
   toast('Site updated ✓', 'success');
   refreshSitesList();
@@ -719,11 +763,13 @@ function cancelAddSite() {
   refreshSitesList();
 }
 
-function saveNewSite() {
+async function saveNewSite() {
   var name = val('sa-name').trim();
   var url = val('sa-url').trim();
   if (!name || !url) { toast('Name and URL are required', 'error'); return; }
   if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+
+  var image = await readAndResizeImage('sa-image');
 
   var sites = [];
   try { sites = JSON.parse(localStorage.getItem('jv_sites') || '[]'); } catch (e) {}
@@ -737,9 +783,14 @@ function saveNewSite() {
     notes: val('sa-notes').trim(),
     verified: document.getElementById('sa-verified').checked,
     domain_owned: false,
-    image: null
+    image: image
   });
-  localStorage.setItem('jv_sites', JSON.stringify(sites));
+  try {
+    localStorage.setItem('jv_sites', JSON.stringify(sites));
+  } catch (err) {
+    toast('Could not save — local storage is full, try a smaller image', 'error');
+    return;
+  }
   addingSite = false;
   toast('Site added ✓', 'success');
   refreshSitesList();
