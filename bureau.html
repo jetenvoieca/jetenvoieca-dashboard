@@ -108,7 +108,7 @@ button,input,textarea,select{font-family:'Jost',sans-serif;font-size:13px;font-w
       <div class="preview-dot" style="background:#febc2e"></div>
       <div class="preview-dot" style="background:#28c840"></div>
       <span class="preview-url" id="preview-url">jetenvoieca.com</span>
-      <button class="preview-refresh" onclick="refreshPreview()" title="Refresh">↺</button>
+      <button class="preview-refresh" onclick="refreshPreview()" title="Refresh">Refresh</button>
     </div>
     <iframe id="preview" src="https://jetenvoieca.com" title="Site preview"></iframe>
   </div>
@@ -127,7 +127,7 @@ button,input,textarea,select{font-family:'Jost',sans-serif;font-size:13px;font-w
       <div class="nav-wordmark">Jetenvoieca</div>
 
       <div class="action-row">
-        <button class="btn-publish" id="btn-publish" onclick="publish()">↑ Publish</button>
+        <button class="btn-publish" id="btn-publish" onclick="publish()">Publish</button>
         <div class="publish-status" id="publish-status">All changes published</div>
       </div>
 
@@ -140,9 +140,9 @@ button,input,textarea,select{font-family:'Jost',sans-serif;font-size:13px;font-w
         </button>
         <div class="acc-body open" id="acc-body-pages">
           <div class="acc-items">
-            <button class="acc-item" onclick="showView('home')">⌂ Home</button>
-            <button class="acc-item" onclick="showView('story')">◎ Story</button>
-            <button class="acc-item" onclick="showView('contact')">✉ Contact</button>
+            <button class="acc-item" onclick="showView('home')">Home</button>
+            <button class="acc-item" onclick="showView('story')">Story</button>
+            <button class="acc-item" onclick="showView('contact')">Contact</button>
           </div>
         </div>
       </div>
@@ -156,8 +156,8 @@ button,input,textarea,select{font-family:'Jost',sans-serif;font-size:13px;font-w
         </button>
         <div class="acc-body" id="acc-body-sites">
           <div class="acc-items">
-            <button class="acc-item" onclick="showView('sites-dashboard')">⊞ All Sites</button>
-            <button class="acc-item" onclick="showView('sites-add')">+ Add Site</button>
+            <button class="acc-item" onclick="showView('sites-dashboard')">All Sites</button>
+            <button class="acc-item" onclick="showView('sites-add')">Add Site</button>
           </div>
         </div>
       </div>
@@ -169,9 +169,9 @@ button,input,textarea,select{font-family:'Jost',sans-serif;font-size:13px;font-w
         </button>
         <div class="acc-body" id="acc-body-domains">
           <div class="acc-items">
-            <button class="acc-item" onclick="showView('domains-unassigned')">⚑ Unassigned</button>
-            <button class="acc-item" onclick="showView('domains-all')">◈ All Domains</button>
-            <button class="acc-item" onclick="showView('domains-sync')">↻ NC Sync</button>
+            <button class="acc-item" onclick="showView('domains-unassigned')">Unassigned</button>
+            <button class="acc-item" onclick="showView('domains-all')">All Domains</button>
+            <button class="acc-item" onclick="showView('domains-sync')">NC Sync</button>
           </div>
         </div>
       </div>
@@ -185,7 +185,7 @@ button,input,textarea,select{font-family:'Jost',sans-serif;font-size:13px;font-w
         </button>
         <div class="acc-body" id="acc-body-settings">
           <div class="acc-items">
-            <button class="acc-item" onclick="showView('settings-site')">⚙ Site Settings</button>
+            <button class="acc-item" onclick="showView('settings-site')">Site Settings</button>
           </div>
         </div>
       </div>
@@ -240,18 +240,17 @@ async function publish() {
   status.textContent = 'Publishing…';
   status.className = 'publish-status pending';
 
-  try {
-    var res = await fetch('/.netlify/functions/publish-content', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        content: JSON.stringify(state.content, null, 2),
-        message: 'Update content.json via Bureau'
-      })
-    });
-    var json = await res.json();
-    if (!res.ok) throw new Error(json.error || ('Publish failed (' + res.status + ')'));
+  var sites = [];
+  try { sites = JSON.parse(localStorage.getItem('jv_sites') || '[]'); } catch (e) {}
+  var ncDomains = null;
+  try { ncDomains = JSON.parse(localStorage.getItem('nc_domains') || 'null'); } catch (e) {}
 
+  try {
+    await publishFile('content', JSON.stringify(state.content, null, 2), 'Update content.json via Bureau');
+    await publishFile('sites', JSON.stringify(sites, null, 2), 'Update sites.json via Bureau');
+    if (ncDomains) {
+      await publishFile('domains', JSON.stringify(ncDomains, null, 2), 'Update domains.json via Bureau');
+    }
     markSaved();
     toast('Published to GitHub ✓', 'success');
     setTimeout(refreshPreview, 1500); // give Netlify a moment to rebuild
@@ -263,24 +262,53 @@ async function publish() {
   btn.disabled = false;
 }
 
+async function publishFile(target, content, message) {
+  var res = await fetch('/.netlify/functions/publish-content', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ target: target, content: content, message: message })
+  });
+  var json = await res.json();
+  if (!res.ok) throw new Error(json.error || ('Publish failed (' + res.status + ')'));
+  return json;
+}
+
 // ── DEPLOY (via Netlify function — GitHub token lives server-side, never here) ─
-// Pulls the currently-live content.json straight off this site (public, no
-// auth needed) so Bureau reflects whatever's actually published. Runs quietly
-// on load; Publish is the only button the user ever needs to touch.
+// Pulls content.json, sites.json, and domains.json straight off this site
+// (public, no auth needed) so Bureau — and the dashboard, since they share
+// the same browser storage — always reflect what's actually published,
+// rather than whatever was last saved in this one browser.
 async function loadFromGitHub(silent) {
+  var contentOk = false;
   try {
     var res = await fetch('content.json', { cache: 'no-store' });
-    if (!res.ok) {
-      if (!silent) toast('No published content.json yet — Publish will create it', 'error');
-      return;
+    if (res.ok) {
+      state.content = await res.json();
+      saveContent();
+      contentOk = true;
     }
-    var data = await res.json();
-    state.content = data;
-    saveContent();
-    if (state.currentView) showView(state.currentView);
-    if (!silent) toast('Loaded latest published content ✓', 'success');
-  } catch (err) {
-    if (!silent) toast('Load failed: ' + err.message, 'error');
+  } catch (err) { /* offline or first deploy — fall through */ }
+
+  try {
+    var sitesRes = await fetch('sites.json', { cache: 'no-store' });
+    if (sitesRes.ok) {
+      var sitesData = await sitesRes.json();
+      localStorage.setItem('jv_sites', JSON.stringify(sitesData));
+    }
+  } catch (err) { /* first publish hasn't happened yet — keep local copy */ }
+
+  try {
+    var domainsRes = await fetch('domains.json', { cache: 'no-store' });
+    if (domainsRes.ok) {
+      var domainsData = await domainsRes.json();
+      localStorage.setItem('nc_domains', JSON.stringify(domainsData));
+    }
+  } catch (err) { /* no domains published yet — keep local copy */ }
+
+  if (state.currentView) showView(state.currentView);
+  if (!silent) {
+    if (contentOk) toast('Loaded latest published content ✓', 'success');
+    else toast('Nothing published yet — hit Publish to create it', 'error');
   }
 }
 
@@ -319,7 +347,7 @@ function setPreview(mode) {
     urlLabel.textContent = 'jetenvoieca.com';
   }
   var btn = document.getElementById('sites-preview-toggle');
-  if (btn) btn.textContent = (mode === 'dashboard' ? '⌂ Show Site' : '⊞ Show Dashboard');
+  if (btn) btn.textContent = (mode === 'dashboard' ? 'Show Site' : 'Show Dashboard');
 }
 
 function toggleDashboard() {
@@ -467,9 +495,9 @@ function viewSites() {
     '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
     '<input id="sites-search" placeholder="Search…" value="' + esc(sitesSearchTerm) + '" oninput="filterSitesList(this.value)" ' +
       'style="padding:8px 12px;border:.5px solid var(--border);background:white;font-family:inherit;font-size:12px;color:var(--noir);outline:none;border-radius:4px;width:130px">' +
-    '<button class="btn-cancel" id="sites-preview-toggle" onclick="toggleDashboard()">' + (previewMode === 'dashboard' ? '⌂ Show Site' : '⊞ Show Dashboard') + '</button>' +
-    '<button class="btn-cancel" onclick="exportSitesCSV()">↓ Export CSV</button>' +
-    '<button class="btn-save" style="background:var(--pink)" onclick="startAddSite()">+ Add Site</button>' +
+    '<button class="btn-cancel" id="sites-preview-toggle" onclick="toggleDashboard()">' + (previewMode === 'dashboard' ? 'Show Site' : 'Show Dashboard') + '</button>' +
+    '<button class="btn-cancel" onclick="exportSitesCSV()">Export CSV</button>' +
+    '<button class="btn-cancel" onclick="startAddSite()">Add Site</button>' +
     '</div></div>' +
     '<div id="sites-list">' + renderSitesRows(filterSitesData(sites, sitesSearchTerm)) + '</div>' +
     '</div>';
@@ -787,7 +815,7 @@ function viewNcSync() {
 
     '<div class="card"><div class="card-title">Import Domain Data</div>' +
     '<p style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.6">Run <code>node fetch-domains.js</code> in Terminal to generate <code>namecheap-domains.json</code>, then import it here.</p>' +
-    '<button class="btn-save" onclick="document.getElementById(\'nc-file\').click()" style="width:100%;text-align:center">↑ Import namecheap-domains.json</button>' +
+    '<button class="btn-save" onclick="document.getElementById(\'nc-file\').click()" style="width:100%;text-align:center">Import namecheap-domains.json</button>' +
     '<input type="file" id="nc-file" accept=".json" style="display:none" onchange="importDomains(this)">' +
     '<div id="nc-status" style="font-size:12px;color:var(--muted);margin-top:10px;text-align:center"></div>' +
     '</div></div>';
