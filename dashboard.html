@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jetenvoica Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;1,300&family=Jost:wght@300;400&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--cream:#FAF7F2;--ivory:#F3EDE3;--noir:#1A1714;--muted:#7A7066;--gold:#C4965A;--pink:#E8698A;--border:rgba(26,23,20,0.12)}
+body{font-family:'Jost',sans-serif;background:var(--cream);color:var(--noir);font-size:14px;font-weight:300;min-height:100vh}
+button,input,select{font-family:'Jost',sans-serif;font-size:13px;font-weight:300;cursor:pointer}
+
+.topbar{position:sticky;top:0;z-index:10;background:var(--cream);border-bottom:.5px solid var(--border);height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;gap:16px}
+.topbar-title{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+.topbar-right{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.topbar-stat{font-size:12px;color:var(--muted)}
+.topbar-stat.gold{color:var(--gold)}
+.search-input{padding:6px 12px;border:.5px solid var(--border);background:white;font-family:inherit;font-size:13px;color:var(--noir);outline:none;border-radius:0;width:160px}
+.btn-add{padding:7px 20px;background:var(--pink);color:white;border:none;font-size:12px;letter-spacing:.12em;text-transform:uppercase}
+.btn-add:hover{background:#d4547a}
+.btn-export{padding:7px 16px;background:transparent;color:var(--muted);border:.5px solid var(--border);font-size:12px;letter-spacing:.12em;text-transform:uppercase}
+.btn-export:hover{color:var(--noir);border-color:var(--noir)}
+.btn-backup{padding:6px 14px;background:transparent;color:var(--muted);border:none;font-family:inherit;font-size:11px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer}
+.btn-backup:hover{color:var(--noir);background:var(--ivory)}
+
+.grid{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;max-width:1600px;margin:0 auto;padding:24px}
+
+.empty{text-align:center;margin-top:80px;padding:24px}
+.empty h2{font-family:'Cormorant Garamond',serif;font-size:32px;font-weight:300;margin-bottom:12px}
+.empty p{font-size:14px;color:var(--muted);margin-bottom:24px}
+
+.card{background:white;border:.5px solid var(--border);overflow:hidden;display:flex;flex-direction:column;min-width:0}
+.card-thumb{height:160px;background:linear-gradient(135deg,var(--ivory),#e8e0d8);overflow:hidden;position:relative;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px}
+.card-thumb img.screenshot{width:100%;height:100%;object-fit:cover;display:block}
+.card-thumb .favicon-wrap{width:48px;height:48px;border-radius:50%;background:white;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.1)}
+.card-thumb .favicon-wrap img{width:24px;height:24px}
+.card-thumb .domain-label{font-size:12px;color:var(--muted);letter-spacing:.06em}
+.card-thumb-overlay{position:absolute;inset:0;background:rgba(0,0,0,0);transition:background .2s}
+.card-thumb:hover .card-thumb-overlay{background:rgba(0,0,0,.15)}
+
+.card-info{padding:12px 14px;flex:1;min-width:0}
+.card-row{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px}
+.card-name{font-family:'Cormorant Garamond',serif;font-size:16px;font-style:italic;color:var(--noir)}
+.card-badges{display:flex;gap:5px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end}
+.badge{font-size:10px;letter-spacing:.08em;text-transform:uppercase;padding:2px 7px;border:.5px solid var(--border);color:var(--muted)}
+.badge.gold{border-color:var(--gold);color:var(--gold)}
+.badge.pink{border-color:var(--pink);color:var(--pink)}
+.card-domain{font-size:11px;color:var(--muted)}
+
+.card-actions{display:flex;border-top:.5px solid var(--border)}
+.btn-site{flex:1;padding:9px 0;background:var(--noir);color:var(--cream);border:none;font-size:11px;letter-spacing:.12em;text-transform:uppercase;transition:background .2s}
+.btn-site:hover{background:var(--pink)}
+.btn-edit{flex:1;padding:9px 0;background:transparent;color:var(--muted);border:none;border-left:.5px solid var(--border);font-size:11px;letter-spacing:.12em;text-transform:uppercase}
+.btn-edit:hover{color:var(--noir)}
+.btn-del{padding:9px 14px;background:transparent;color:var(--muted);border:none;border-left:.5px solid var(--border);font-size:11px}
+.btn-del:hover{color:#c0392b}
+
+/* MODAL */
+.modal-bg{position:fixed;inset:0;background:rgba(26,23,20,.5);z-index:200;display:flex;align-items:center;justify-content:center}
+.modal{background:var(--cream);width:480px;max-width:95vw;padding:28px;position:relative}
+.modal-title{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);margin-bottom:20px}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+.field input,.field select{width:100%;padding:9px 12px;border:.5px solid var(--border);background:white;color:var(--noir);outline:none;border-radius:0;-webkit-appearance:none}
+.field input:focus{border-color:var(--pink)}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.toggle-row{display:flex;align-items:center;gap:12px;cursor:pointer;margin-bottom:20px}
+.toggle{width:36px;height:20px;border-radius:10px;background:#C4B5A0;position:relative;transition:background .2s;flex-shrink:0}
+.toggle.on{background:var(--pink)}
+.toggle-knob{position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:white;transition:left .2s}
+.toggle.on .toggle-knob{left:19px}
+.toggle-label{font-size:13px;color:var(--noir)}
+.modal-actions{display:flex;gap:10px;justify-content:flex-end}
+.btn-cancel{padding:9px 20px;border:.5px solid var(--border);background:transparent;color:var(--muted)}
+.btn-save{padding:9px 20px;background:var(--noir);color:var(--cream);border:none}
+.btn-save:hover{background:var(--pink)}
+.btn-primary{padding:12px 32px;background:var(--noir);color:var(--cream);border:none;font-size:12px;letter-spacing:.14em;text-transform:uppercase}
+
+@media(max-width:600px){
+  .topbar{padding:0 16px}
+  .search-input{width:120px}
+  .grid{padding:16px;grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div style="display:flex;align-items:center;gap:20px">
+    <span class="topbar-title">Jetenvoica Dashboard</span>
+    <div style="display:flex;border:.5px solid rgba(26,23,20,0.12)">
+      <button onclick="showView('sites')" id="tab-sites" style="padding:6px 16px;border:none;background:#1A1714;color:#FAF7F2;font-family:inherit;font-size:11px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer">Sites</button>
+      <button onclick="showView('domains')" id="tab-domains" style="padding:6px 16px;border:none;background:transparent;color:#7A7066;font-family:inherit;font-size:11px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;border-left:.5px solid rgba(26,23,20,0.12)">Domains</button>
+    </div>
+  </div>
+  <div class="topbar-right" id="sites-controls">
+    <span class="topbar-stat" id="site-count">0 sites</span>
+    <span class="topbar-stat gold" id="mrr" style="display:none"></span>
+    <div style="display:flex;border:.5px solid rgba(26,23,20,0.12)">
+      <button onclick="verifiedFilter='all';renderGrid()" id="vf-all" style="padding:6px 12px;border:none;background:#1A1714;color:#FAF7F2;font-family:inherit;font-size:11px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer">All</button>
+      <button onclick="verifiedFilter='verified';renderGrid()" id="vf-verified" style="padding:6px 12px;border:none;background:transparent;color:#7A7066;font-family:inherit;font-size:11px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer">✓ Verified</button>
+      <button onclick="verifiedFilter='unverified';renderGrid()" id="vf-unverified" style="padding:6px 12px;border:none;background:transparent;color:#7A7066;font-family:inherit;font-size:11px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer">Unverified</button>
+    </div>
+    <input class="search-input" id="search" placeholder="Search…" oninput="renderGrid()">
+    <button class="btn-export" onclick="exportCSV()">↓ Export CSV</button>
+    <div style="display:flex;border:.5px solid rgba(26,23,20,0.12)">
+      <button class="btn-backup" onclick="saveBackup()" title="Save a full backup including images">↓ Backup</button>
+      <button class="btn-backup" onclick="document.getElementById('restore-input').click()" title="Restore from a backup file" style="border-left:.5px solid rgba(26,23,20,0.12)">↑ Restore</button>
+    </div>
+    <input type="file" id="restore-input" accept=".json" style="display:none" onchange="loadBackup(this)">
+    <button class="btn-backup" onclick="openSettings()" title="Namecheap API Settings" style="border:.5px solid rgba(26,23,20,0.12);padding:6px 12px">⚙ NC Sync</button>
+    <button class="btn-add" onclick="openModal()">+ Add Site</button>
+  </div>
+</div>
+
+<div class="modal-bg" id="settings-modal" style="display:none">
+  <div class="modal" style="max-width:460px">
+    <p class="modal-title">Namecheap API Settings</p>
+    <div class="field">
+      <label>Namecheap Username</label>
+      <input type="text" id="nc-username" placeholder="your namecheap username" autocomplete="off">
+    </div>
+    <div class="field">
+      <label>API Key</label>
+      <input type="password" id="nc-apikey" placeholder="paste your API key here" autocomplete="off">
+    </div>
+    <div class="field">
+      <label>Your Whitelisted IP Address</label>
+      <input type="text" id="nc-ip" placeholder="e.g. 82.45.123.67" autocomplete="off">
+      <p style="font-size:11px;color:var(--muted);margin-top:5px">Must match the IP you whitelisted in Namecheap · <a href="https://www.whatismyip.com" target="_blank" style="color:var(--pink)">Check my IP</a></p>
+    </div>
+    <p style="font-size:11px;color:var(--muted);margin-bottom:16px;line-height:1.6">Your credentials are stored only in your browser and sent directly to Namecheap — never stored elsewhere.</p>
+    <div style="display:flex;gap:10px;margin-bottom:16px">
+      <button class="btn-save" onclick="saveNcSettings()" style="flex:1">Save Settings</button>
+      <button class="btn-cancel" onclick="closeSettings()">Cancel</button>
+    </div>
+    <div style="border-top:.5px solid var(--border);padding-top:16px">
+      <p style="font-size:12px;color:var(--muted);margin-bottom:10px">Fetches all your Namecheap domains, matches them to cards by hostname, updates expiry dates, and shows any domains not yet assigned to a card.</p>
+      <button class="btn-export" onclick="runNcSync()" style="width:100%;text-align:center;margin-bottom:8px" id="sync-btn">↻ Sync Domains from Namecheap</button>
+      <div style="border-top:.5px solid var(--border);padding-top:12px;margin-top:4px">
+        <p style="font-size:12px;color:var(--muted);margin-bottom:8px">Or import the <code>namecheap-domains.json</code> file generated by the local script:</p>
+        <button class="btn-export" onclick="document.getElementById('nc-import-input').click()" style="width:100%;text-align:center">↑ Import namecheap-domains.json</button>
+        <input type="file" id="nc-import-input" accept=".json" style="display:none" onchange="importNcDomains(this)">
+      </div>
+      <p id="sync-status" style="font-size:12px;color:var(--muted);margin-top:10px;text-align:center"></p>
+    </div>
+  </div>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<div id="domains-view" style="display:none;max-width:900px;margin:0 auto;padding:24px">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+    <div>
+      <h2 style="font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:300;margin-bottom:4px">Unassigned Domains</h2>
+      <p style="font-size:12px;color:var(--muted)">Domains in your Namecheap account not linked to any site card</p>
+    </div>
+    <span id="unassigned-count" style="font-size:12px;color:var(--muted)"></span>
+  </div>
+  <div id="domains-table"></div>
+  <div style="margin-top:32px;padding-top:20px;border-top:.5px solid var(--border)">
+    <h2 style="font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:300;margin-bottom:4px">All Namecheap Domains</h2>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:20px">Complete list with expiry dates</p>
+    <div id="all-domains-table"></div>
+  </div>
+  <p style="font-size:11px;color:var(--muted);margin-top:24px;text-align:center">Import updated data via ⚙ NC Sync → Import namecheap-domains.json</p>
+</div>
+<div class="modal-bg" id="modal" style="display:none">
+  <div class="modal">
+    <p class="modal-title" id="modal-title">Add New Site</p>
+    <div class="field">
+      <label>Artist / Client Name</label>
+      <input type="text" id="f-name" placeholder="e.g. Louise Dear">
+    </div>
+    <div class="field">
+      <label>Thumbnail Image (optional)</label>
+      <input type="file" id="f-image" accept="image/*" style="padding:6px 12px">
+      <p style="font-size:11px;color:var(--muted);margin-top:5px">Upload a screenshot or photo · JPEG or PNG</p>
+    </div>
+    <div class="field">
+      <label>Email Address</label>
+      <input type="email" id="f-email" placeholder="client@email.com">
+    </div>
+    <div class="field">
+      <label>Website URL</label>
+      <input type="text" id="f-url" placeholder="e.g. louisedear.com">
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>Payment Method</label>
+        <select id="f-sub-method">
+          <option value="">Select…</option>
+          <option>Stripe</option>
+          <option>PayPal</option>
+          <option>Bank Transfer</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Monthly Amount (£)</label>
+        <input type="text" id="f-sub-amount" placeholder="e.g. 25">
+      </div>
+    </div>
+    <div class="field">
+      <label>Notes (internal, not shown on card)</label>
+      <textarea id="f-notes" rows="3" style="width:100%;padding:9px 12px;border:.5px solid var(--border);font-family:inherit;font-size:13px;color:#1A1714;outline:none;border-radius:0;resize:vertical;line-height:1.7"></textarea>
+    </div>
+    <div class="toggle-row" onclick="toggleVerified()" style="margin-bottom:20px">
+      <div class="toggle" id="verified-toggle"><div class="toggle-knob"></div></div>
+      <span class="toggle-label">Verified</span>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn-save" onclick="saveSite()">Save Site</button>
+    </div>
+  </div>
+</div>
+
+<script>
+var editingId = null;
+var verifiedFilter = 'all';
+var verified = false;
+var domainOwned = false;
+
+function save() {
+  try { localStorage.setItem('jv_sites', JSON.stringify(sites)); } catch(e) {}
+}
+
+function loadSites() {
+  try { return JSON.parse(localStorage.getItem('jv_sites') || '[]'); } catch(e) { return []; }
+}
+
+var sites = loadSites();
+
+function getUrl(raw) {
+  var u = raw.trim();
+  if (!u.startsWith('http')) u = 'https://' + u;
+  return u;
+}
+
+function hostname(url) {
+  try { return new URL(url).hostname.replace('www.', ''); } catch(e) { return url; }
+}
+
+function renderGrid() {
+  var q = document.getElementById('search').value.toLowerCase();
+  var filtered = sites.filter(function(s) {
+    var matchSearch = s.name.toLowerCase().includes(q) || s.url.toLowerCase().includes(q);
+    var matchVerified = verifiedFilter === 'all' || (verifiedFilter === 'verified' ? s.verified : !s.verified);
+    return matchSearch && matchVerified;
+  }).sort(function(a, b) {
+    return lastName(a.name).localeCompare(lastName(b.name));
+  });
+
+  var total = filtered.length;
+  var mrr = filtered.reduce(function(sum, s) { return sum + (parseFloat(s.sub_amount) || 0); }, 0);
+  document.getElementById('site-count').textContent = total + ' site' + (total !== 1 ? 's' : '');
+  var mrrEl = document.getElementById('mrr');
+  if (mrr > 0) { mrrEl.textContent = '£' + mrr.toFixed(0) + '/mo'; mrrEl.style.display = ''; }
+  else mrrEl.style.display = 'none';
+  // Update filter buttons
+  ['all','verified','unverified'].forEach(function(f) {
+    var btn = document.getElementById('vf-' + f);
+    if (btn) { btn.style.background = verifiedFilter === f ? '#1A1714' : 'transparent'; btn.style.color = verifiedFilter === f ? '#FAF7F2' : '#7A7066'; }
+  });
+
+  var grid = document.getElementById('grid');
+  if (filtered.length === 0) {
+    grid.innerHTML = '<div class="empty"><h2>' + (total === 0 ? 'No sites yet' : 'No results') + '</h2>' +
+      '<p>' + (total === 0 ? 'Add your first client site to get started' : 'Try a different search') + '</p>' +
+      (total === 0 ? '<button class="btn-primary" onclick="openModal()">+ Add First Site</button>' : '') + '</div>';
+    return;
+  }
+
+  grid.innerHTML = filtered.map(function(s) {
+    var host = hostname(s.url);
+    var faviconUrl = 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(s.url) + '&sz=32';
+    return '<div class="card">' +
+      '<div class="card-thumb" onclick="window.open(\'' + s.url + '\',\'_blank\')">' +
+      (s.image
+        ? '<img class="screenshot" src="' + s.image + '" style="width:100%;height:100%;object-fit:cover;display:block">'
+        : '<img class="screenshot" src="https://s0.wordpress.com/mshots/v1/' + encodeURIComponent(s.url) + '?w=600&h=400" ' +
+          'onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\';this.nextElementSibling.nextElementSibling.style.display=\'block\'">' +
+          '<div class="favicon-wrap" style="display:none"><img src="' + faviconUrl + '"></div>' +
+          '<p class="domain-label" style="display:none">' + host + '</p>') +
+      '<div class="card-thumb-overlay"></div></div>' +
+      '<div class="card-info">' +
+      '<div class="card-row"><div class="card-name">' + esc(s.name) + '</div>' +
+      '<div class="card-badges">' +
+      (s.sub_method ? '<span class="badge">' + esc(s.sub_method) + '</span>' : '') +
+      (s.sub_amount ? '<span class="badge gold">£' + esc(s.sub_amount) + '</span>' : '') +
+      '</div></div>' +
+      '<div class="card-row"><span class="card-domain">' + host + '</span>' +
+      (s.nc_expiry ? '<span style="font-size:10px;color:' + expiryColor(s.nc_expiry) + ';letter-spacing:.06em">' + formatExpiry(s.nc_expiry) + '</span>' : '') +
+      '</div>' +
+      (s.nc_cost ? '<div style="font-size:10px;color:var(--muted);margin-top:2px">Renewal: £' + s.nc_cost + '/yr</div>' : '') +
+      '</div>' +
+      '<div class="card-actions">' +
+      '<div style="flex:1;display:flex;align-items:center;justify-content:center;gap:5px;padding:9px 0;border-right:.5px solid var(--border)">' +
+      (s.verified ? '<span style="width:20px;height:20px;border-radius:50%;background:#2e7d32;color:white;font-size:12px;display:flex;align-items:center;justify-content:center">✓</span>' : '') +
+      (s.domain_owned ? '<span style="width:18px;height:18px;border-radius:50%;background:#2e7d32;color:white;font-size:10px;font-weight:600;display:flex;align-items:center;justify-content:center;letter-spacing:0">D</span>' : '') +
+      '</div>' +
+      '<button class="btn-edit" onclick="openEdit(\'' + s.id + '\')">Edit</button>' +
+      '<button class="btn-del" onclick="deleteSite(\'' + s.id + '\')">✕</button>' +
+      '</div></div>';
+  }).join('');
+
+  // Fix favicon fallback display
+  document.querySelectorAll('.card-thumb img.screenshot').forEach(function(img) {
+    img.addEventListener('error', function() {
+      this.style.display = 'none';
+      var wrap = this.nextElementSibling;
+      var label = wrap.nextElementSibling;
+      if (wrap) wrap.style.display = 'flex';
+      if (label) label.style.display = 'block';
+    });
+  });
+}
+
+function lastName(name) {
+  var parts = (name || '').trim().split(' ');
+  return parts[parts.length - 1].toLowerCase();
+}
+
+function openModal(site) {
+  editingId = site ? site.id : null;
+  domainOwned = site ? !!site.domain_owned : false;
+  verified = site ? !!site.verified : false;
+  document.getElementById('modal-title').textContent = site ? 'Edit Site' : 'Add New Site';
+  document.getElementById('f-name').value = site ? site.name : '';
+  document.getElementById('f-email').value = site ? (site.email || '') : '';
+  document.getElementById('f-url').value = site ? site.url : '';
+  document.getElementById('f-sub-method').value = site ? (site.sub_method || '') : '';
+  document.getElementById('f-sub-amount').value = site ? (site.sub_amount || '') : '';
+  document.getElementById('f-notes').value = site ? (site.notes || '') : '';
+  document.getElementById('f-image').value = '';
+  updateVerifiedToggle();
+  document.getElementById('modal').style.display = 'flex';
+  document.getElementById('f-name').focus();
+}
+
+function openEdit(id) {
+  var site = sites.find(function(s) { return s.id === id; });
+  if (site) openModal(site);
+}
+
+function closeModal() { document.getElementById('modal').style.display = 'none'; }
+
+function toggleVerified() { verified = !verified; updateVerifiedToggle(); }
+function updateVerifiedToggle() { var t = document.getElementById('verified-toggle'); t.classList.toggle('on', verified); }
+
+function saveSite() {
+  try {
+  var name = document.getElementById('f-name').value.trim();
+  var url = document.getElementById('f-url').value.trim();
+  if (!name || !url) { alert('Please enter a name and URL'); return; }
+  url = getUrl(url);
+  var imageFile = document.getElementById('f-image').files[0];
+
+  function doSave(imageData) {
+    var existing = editingId ? sites.find(function(s){ return s.id === editingId; }) : null;
+    var site = {
+      id: editingId || String(Date.now()),
+      name: name,
+      email: document.getElementById('f-email').value.trim(),
+      url: url,
+      sub_method: document.getElementById('f-sub-method').value,
+      sub_amount: document.getElementById('f-sub-amount').value.trim(),
+      notes: document.getElementById('f-notes').value.trim(),
+      domain_owned: domainOwned,
+      verified: verified,
+      image: imageData || (existing ? existing.image : null)
+    };
+    if (editingId) {
+      sites = sites.map(function(s) { return s.id === editingId ? site : s; });
+    } else {
+      sites.push(site);
+    }
+    save();
+    closeModal();
+    renderGrid();
+  }
+
+  if (imageFile) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      var img = new Image();
+      img.onload = function() {
+        var canvas = document.createElement('canvas');
+        var maxW = 600, maxH = 400;
+        var ratio = Math.min(maxW / img.width, maxH / img.height);
+        canvas.width = Math.round(img.width * ratio);
+        canvas.height = Math.round(img.height * ratio);
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        doSave(canvas.toDataURL('image/jpeg', 0.7));
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(imageFile);
+  } else {
+    doSave(null);
+  }
+  } catch(err) { alert('Save error: ' + err.message); }
+}
+
+function deleteSite(id) {
+  if (!confirm('Remove this site?')) return;
+  sites = sites.filter(function(s) { return s.id !== id; });
+  save();
+  renderGrid();
+}
+
+function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function formatExpiry(dateStr) {
+  var d = new Date(dateStr);
+  var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return 'Exp ' + d.getDate() + ' ' + months[d.getMonth()] + ' ' + d.getFullYear();
+}
+
+function expiryColor(dateStr) {
+  var d = new Date(dateStr);
+  var days = (d - new Date()) / (1000 * 60 * 60 * 24);
+  if (days < 30) return '#c0392b';
+  if (days < 90) return '#e67e22';
+  return 'var(--muted)';
+}
+
+function importNcDomains(input) {
+  var file = input.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var data = JSON.parse(e.target.result);
+      if (!data.domains || !Array.isArray(data.domains)) throw new Error('Invalid file format');
+
+      localStorage.setItem('nc_domains', JSON.stringify(data));
+
+      var allDomains = data.domains;
+      var matched = 0;
+
+      sites = sites.map(function(s) {
+        var host = hostname(s.url);
+        var match = allDomains.find(function(d) { return d.name.toLowerCase() === host.toLowerCase(); });
+        if (match) { matched++; return Object.assign({}, s, { nc_expiry: match.expiry, nc_synced: new Date().toISOString(), domain_owned: true }); }
+        return Object.assign({}, s, { domain_owned: false });
+      });
+
+      var siteHosts = sites.map(function(s) { return hostname(s.url).toLowerCase(); });
+      var unassigned = allDomains.filter(function(d) { return !siteHosts.includes(d.name.toLowerCase()); });
+
+      save();
+      renderGrid();
+
+      var status = document.getElementById('sync-status');
+      status.style.color = '#2e7d32';
+      var msg = '✓ ' + matched + ' of ' + sites.length + ' cards matched · ' + allDomains.length + ' domains imported';
+      if (unassigned.length > 0) {
+        msg += ' · ' + unassigned.length + ' unassigned: ' + unassigned.map(function(d) { return d.name; }).join(', ');
+      }
+      status.textContent = msg;
+      input.value = '';
+    } catch(err) {
+      alert('Import failed: ' + err.message);
+      input.value = '';
+    }
+  };
+  reader.readAsText(file);
+}
+
+function showView(view) {
+  var isSites = view === 'sites';
+  document.getElementById('grid').style.display = isSites ? '' : 'none';
+  document.getElementById('domains-view').style.display = isSites ? 'none' : 'block';
+  document.getElementById('sites-controls').style.display = isSites ? 'flex' : 'none';
+  document.getElementById('tab-sites').style.background = isSites ? '#1A1714' : 'transparent';
+  document.getElementById('tab-sites').style.color = isSites ? '#FAF7F2' : '#7A7066';
+  document.getElementById('tab-domains').style.background = isSites ? 'transparent' : '#1A1714';
+  document.getElementById('tab-domains').style.color = isSites ? '#7A7066' : '#FAF7F2';
+  if (!isSites) renderDomains();
+}
+
+function renderDomains() {
+  var ncData = null;
+  try { ncData = JSON.parse(localStorage.getItem('nc_domains') || 'null'); } catch(e) {}
+
+  if (!ncData) {
+    document.getElementById('domains-table').innerHTML = '<p style="color:var(--muted);font-size:13px">No domain data yet — import your namecheap-domains.json via ⚙ NC Sync.</p>';
+    document.getElementById('all-domains-table').innerHTML = '';
+    document.getElementById('unassigned-count').textContent = '';
+    return;
+  }
+
+  var allDomains = ncData.domains;
+  var siteHosts = sites.map(function(s) { return hostname(s.url).toLowerCase(); });
+  var unassigned = allDomains.filter(function(d) { return !siteHosts.includes(d.name.toLowerCase()); });
+
+  document.getElementById('unassigned-count').textContent = unassigned.length + ' domains · fetched ' + new Date(ncData.fetched).toLocaleDateString('en-GB');
+
+  function domainRow(d, assigned) {
+    var expDate = new Date(d.expiry);
+    var days = (expDate - new Date()) / (1000*60*60*24);
+    var color = days < 30 ? '#c0392b' : days < 90 ? '#e67e22' : 'var(--muted)';
+    var assignedSite = assigned ? sites.find(function(s) { return hostname(s.url).toLowerCase() === d.name.toLowerCase(); }) : null;
+    return '<div style="display:flex;align-items:center;padding:10px 14px;border-bottom:.5px solid var(--border);gap:12px">' +
+      '<a href="http://' + d.name + '" target="_blank" style="flex:1;font-size:13px;color:var(--noir);text-decoration:none;border-bottom:.5px solid var(--border)">' + d.name + '</a>' +
+      (assignedSite ? '<span style="font-size:11px;color:var(--muted)">' + assignedSite.name + '</span>' : '') +
+      '<span style="font-size:11px;color:' + color + ';min-width:100px;text-align:right">' + formatExpiry(d.expiry) + '</span>' +
+      (days < 90 ? '<span style="font-size:10px;padding:2px 6px;background:' + (days < 30 ? '#fdecea' : '#fef3e2') + ';color:' + color + '">!' + Math.round(days) + 'd</span>' : '') +
+      '</div>';
+  }
+
+  var unassignedHtml = unassigned.length === 0
+    ? '<p style="color:#2e7d32;font-size:13px;padding:12px 0">✓ All Namecheap domains are assigned to site cards.</p>'
+    : '<div style="border:.5px solid var(--border)">' + unassigned.map(function(d) { return domainRow(d, false); }).join('') + '</div>';
+  document.getElementById('domains-table').innerHTML = unassignedHtml;
+
+  var allHtml = '<div style="border:.5px solid var(--border)">' +
+    allDomains.sort(function(a,b) {
+      return new Date(a.expiry) - new Date(b.expiry);
+    }).map(function(d) { return domainRow(d, true); }).join('') + '</div>';
+  document.getElementById('all-domains-table').innerHTML = allHtml;
+}
+
+function openSettings() {
+  document.getElementById('nc-username').value = localStorage.getItem('nc_username') || '';
+  document.getElementById('nc-apikey').value = localStorage.getItem('nc_apikey') || '';
+  document.getElementById('nc-ip').value = localStorage.getItem('nc_ip') || '';
+  document.getElementById('sync-status').textContent = '';
+  document.getElementById('settings-modal').style.display = 'flex';
+}
+
+function closeSettings() { document.getElementById('settings-modal').style.display = 'none'; }
+
+function saveNcSettings() {
+  var u = document.getElementById('nc-username').value.trim();
+  var k = document.getElementById('nc-apikey').value.trim();
+  var ip = document.getElementById('nc-ip').value.trim();
+  if (!u || !k || !ip) { alert('Please fill in all three fields'); return; }
+  localStorage.setItem('nc_username', u);
+  localStorage.setItem('nc_apikey', k);
+  localStorage.setItem('nc_ip', ip);
+  document.getElementById('sync-status').textContent = '✓ Settings saved';
+}
+
+async function runNcSync() {
+  var u = localStorage.getItem('nc_username');
+  var k = localStorage.getItem('nc_apikey');
+  var ip = localStorage.getItem('nc_ip');
+  if (!u || !k || !ip) { alert('Please save your Namecheap settings first'); return; }
+
+  var status = document.getElementById('sync-status');
+  var btn = document.getElementById('sync-btn');
+  btn.textContent = '↻ Syncing…';
+  btn.disabled = true;
+  status.style.color = 'var(--muted)';
+
+  function extractAttr(str, attr) {
+    var m = str.match(new RegExp(attr + '="([^"]+)"'));
+    return m ? m[1] : '';
+  }
+
+  async function fetchPage(page) {
+    var ncUrl = 'https://api.namecheap.com/xml.response?ApiUser=' + encodeURIComponent(u) +
+      '&ApiKey=' + encodeURIComponent(k) +
+      '&UserName=' + encodeURIComponent(u) +
+      '&ClientIp=' + encodeURIComponent(ip) +
+      '&Command=namecheap.domains.getList&PageSize=100&Page=' + page;
+    var proxyUrl = 'https://api.allorigins.win/get?url=' + encodeURIComponent(ncUrl);
+    var res = await fetch(proxyUrl);
+    var json = await res.json();
+    return json.contents;
+  }
+
+  try {
+    status.textContent = 'Fetching domains from Namecheap…';
+    var firstPage = await fetchPage(1);
+
+    if (firstPage.includes('<Status>ERROR</Status>')) {
+      var errMatch = firstPage.match(/<Error Number[^>]*>([^<]+)<\/Error>/);
+      throw new Error(errMatch ? errMatch[1] : 'Namecheap API error');
+    }
+
+    var totalMatch = firstPage.match(/<TotalItems>(\d+)<\/TotalItems>/);
+    var total = totalMatch ? parseInt(totalMatch[1]) : 0;
+    var totalPages = Math.ceil(total / 100) || 1;
+
+    var allXml = firstPage;
+    for (var p = 2; p <= totalPages; p++) {
+      allXml += await fetchPage(p);
+    }
+
+    var parts = allXml.split('<Domain ');
+    var allDomains = [];
+    for (var i = 1; i < parts.length; i++) {
+      var block = parts[i];
+      var name = extractAttr(block, 'Name');
+      var expiry = extractAttr(block, 'Expires');
+      if (name) allDomains.push({ name: name, expiry: expiry });
+    }
+
+    var matched = 0;
+    sites = sites.map(function(s) {
+      var host = hostname(s.url);
+      var match = allDomains.find(function(d) { return d.name.toLowerCase() === host.toLowerCase(); });
+      if (match) { matched++; return Object.assign({}, s, { nc_expiry: match.expiry, nc_synced: new Date().toISOString() }); }
+      return s;
+    });
+
+    var siteHosts = sites.map(function(s) { return hostname(s.url).toLowerCase(); });
+    var unassigned = allDomains.filter(function(d) { return !siteHosts.includes(d.name.toLowerCase()); });
+
+    save();
+    renderGrid();
+    status.style.color = '#2e7d32';
+    var msg = '✓ ' + matched + ' of ' + sites.length + ' cards matched · ' + allDomains.length + ' domains in Namecheap';
+    if (unassigned.length > 0) {
+      msg += ' · ' + unassigned.length + ' unassigned: ' + unassigned.map(function(d) { return d.name; }).join(', ');
+    }
+    status.textContent = msg;
+  } catch(err) {
+    status.style.color = '#c0392b';
+    status.textContent = '✗ Error: ' + err.message;
+  }
+  btn.textContent = '↻ Sync Domains from Namecheap';
+  btn.disabled = false;
+}
+
+function saveBackup() {
+  var json = JSON.stringify(sites, null, 2);
+  var blob = new Blob([json], {type:'application/json'});
+  var a = document.createElement('a');
+  var date = new Date().toISOString().slice(0,10);
+  a.href = URL.createObjectURL(blob);
+  a.download = 'jetenvoieca-backup-' + date + '.json';
+  a.click();
+}
+
+function loadBackup(input) {
+  var file = input.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var data = JSON.parse(e.target.result);
+      if (!Array.isArray(data)) throw new Error('Invalid format');
+      if (!confirm('This will replace all current data with the backup (' + data.length + ' sites). Continue?')) { input.value=''; return; }
+      sites = data;
+      save();
+      renderGrid();
+      input.value = '';
+    } catch(err) {
+      alert('Restore failed: ' + err.message);
+      input.value = '';
+    }
+  };
+  reader.readAsText(file);
+}
+
+function exportCSV() {
+  var headers = ['Name','Email','URL','Payment Method','Monthly Amount (£)','ISYT Domain','Verified','Notes'];
+  var rows = sites.map(function(s) {
+    return [
+      s.name,
+      s.email || '',
+      s.url,
+      s.sub_method || '',
+      s.sub_amount || '',
+      s.domain_owned ? 'Yes' : 'No',
+      s.verified ? 'Yes' : 'No',
+      s.notes || ''
+    ].map(function(v) { return '"' + String(v).replace(/"/g, '""') + '"'; });
+  });
+  var csv = [headers.map(function(h){ return '"'+h+'"'; })].concat(rows).map(function(r){ return r.join(','); }).join('\r\n');
+  var blob = new Blob([csv], {type:'text/csv'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'jetenvoieca-sites.csv';
+  a.click();
+}
+
+// Close modal on background click
+document.getElementById('modal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+document.getElementById('settings-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeSettings();
+});
+
+// Enter key in form
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') { closeModal(); closeSettings(); }
+});
+
+renderGrid();
+</script>
+</body>
+</html>
