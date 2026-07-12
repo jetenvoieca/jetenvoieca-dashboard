@@ -451,10 +451,38 @@ function saveContact() {
 }
 
 // ── SITES DASHBOARD ───────────────────────────────────────────────────────────
+var sitesSearchTerm = '';
+
 function viewSites() {
   var sites = [];
   try { sites = JSON.parse(localStorage.getItem('jv_sites') || '[]'); } catch(e) {}
-  var rows = sites.map(function(s) {
+
+  return '<div class="edit-inner">' +
+    '<div class="sticky-hd" style="display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap">' +
+    '<div><div class="edit-title">Sites</div><div class="edit-sub">' + sites.length + ' client sites · £' + mrr(sites).toFixed(0) + '/mo</div></div>' +
+    '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
+    '<input id="sites-search" placeholder="Search…" value="' + esc(sitesSearchTerm) + '" oninput="filterSitesList(this.value)" ' +
+      'style="padding:8px 12px;border:.5px solid var(--border);background:white;font-family:inherit;font-size:12px;color:var(--noir);outline:none;border-radius:4px;width:130px">' +
+    '<button class="btn-cancel" id="sites-preview-toggle" onclick="toggleDashboard()">' + (previewMode === 'dashboard' ? '⌂ Show Site' : '⊞ Show Dashboard') + '</button>' +
+    '<button class="btn-cancel" onclick="exportSitesCSV()">↓ Export CSV</button>' +
+    '</div></div>' +
+    '<div id="sites-list">' + renderSitesRows(filterSitesData(sites, sitesSearchTerm)) + '</div>' +
+    '</div>';
+}
+
+function filterSitesData(sites, term) {
+  var q = (term || '').trim().toLowerCase();
+  if (!q) return sites;
+  return sites.filter(function(s) {
+    return (s.name || '').toLowerCase().indexOf(q) > -1 || (s.url || '').toLowerCase().indexOf(q) > -1;
+  });
+}
+
+function renderSitesRows(sites) {
+  if (sites.length === 0) {
+    return '<p style="color:var(--muted);font-size:13px;text-align:center;margin-top:40px">No matching sites</p>';
+  }
+  return sites.map(function(s) {
     return '<div style="display:flex;align-items:center;padding:10px 0;border-bottom:.5px solid var(--border);gap:12px">' +
       '<div style="flex:1"><div style="font-family:\'Cormorant Garamond\',serif;font-size:15px;font-style:italic">' + esc(s.name) + '</div>' +
       '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + esc(s.url||'') + '</div></div>' +
@@ -462,18 +490,15 @@ function viewSites() {
       (s.verified ? '<span style="width:18px;height:18px;border-radius:50%;background:#2e7d32;color:white;font-size:11px;display:flex;align-items:center;justify-content:center">✓</span>' : '') +
       '</div>';
   }).join('');
+}
 
-  return '<div class="edit-inner">' +
-    '<div class="sticky-hd" style="display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap">' +
-    '<div><div class="edit-title">Sites</div><div class="edit-sub">' + sites.length + ' client sites · £' + mrr(sites).toFixed(0) + '/mo</div></div>' +
-    '<div style="display:flex;gap:8px">' +
-    '<button class="btn-cancel" id="sites-preview-toggle" onclick="toggleDashboard()">' + (previewMode === 'dashboard' ? '⌂ Show Site' : '⊞ Show Dashboard') + '</button>' +
-    '<button class="btn-cancel" onclick="exportSitesCSV()">↓ Export CSV</button>' +
-    '</div></div>' +
-    (sites.length === 0
-      ? '<p style="color:var(--muted);font-size:13px;text-align:center;margin-top:40px">No sites yet — add one from the dashboard</p>'
-      : '<div>' + rows + '</div>') +
-    '</div>';
+// Re-renders only the rows list, so the search input never loses focus while typing.
+function filterSitesList(term) {
+  sitesSearchTerm = term;
+  var sites = [];
+  try { sites = JSON.parse(localStorage.getItem('jv_sites') || '[]'); } catch (e) {}
+  var container = document.getElementById('sites-list');
+  if (container) container.innerHTML = renderSitesRows(filterSitesData(sites, term));
 }
 
 function mrr(sites) {
