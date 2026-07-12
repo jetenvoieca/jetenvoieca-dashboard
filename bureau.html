@@ -186,7 +186,6 @@ button,input,textarea,select{font-family:'Jost',sans-serif;font-size:13px;font-w
         <div class="acc-body" id="acc-body-settings">
           <div class="acc-items">
             <button class="acc-item" onclick="showView('settings-site')">⚙ Site Settings</button>
-            <button class="acc-item" onclick="showView('settings-github')">⚙ GitHub / Deploy</button>
           </div>
         </div>
       </div>
@@ -235,15 +234,6 @@ function markSaved() {
 async function publish() {
   saveContent();
 
-  var repo = localStorage.getItem('gh_repo');
-  var token = localStorage.getItem('gh_token');
-
-  if (!repo || !token) {
-    toast('Add your GitHub repo & token first', 'error');
-    showView('settings-github');
-    return;
-  }
-
   var btn = document.getElementById('btn-publish');
   var status = document.getElementById('publish-status');
   btn.disabled = true;
@@ -251,7 +241,17 @@ async function publish() {
   status.className = 'publish-status pending';
 
   try {
-    await ghPutFile('content.json', JSON.stringify(state.content, null, 2), 'Update content.json via Bureau');
+    var res = await fetch('/.netlify/functions/publish-content', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content: JSON.stringify(state.content, null, 2),
+        message: 'Update content.json via Bureau'
+      })
+    });
+    var json = await res.json();
+    if (!res.ok) throw new Error(json.error || ('Publish failed (' + res.status + ')'));
+
     markSaved();
     toast('Published to GitHub ✓', 'success');
     setTimeout(refreshPreview, 1500); // give Netlify a moment to rebuild
@@ -263,119 +263,24 @@ async function publish() {
   btn.disabled = false;
 }
 
-// ── GITHUB API ───────────────────────────────────────────────────────────────
-function ghHeaders(token) {
-  return {
-    'Authorization': 'token ' + token,
-    'Accept': 'application/vnd.github+json'
-  };
-}
-
-function b64EncodeUnicode(str) {
-  return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function(match, p1) {
-    return String.fromCharCode('0x' + p1);
-  }));
-}
-
-function b64DecodeUnicode(str) {
-  return decodeURIComponent(atob(str).split('').map(function(c) {
-    return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-  }).join(''));
-}
-
-// Fetches a file's current sha (null if it doesn't exist yet) then PUTs new content.
-async function ghPutFile(path, content, message) {
-  var repo = localStorage.getItem('gh_repo');
-  var token = localStorage.getItem('gh_token');
-  var branch = localStorage.getItem('gh_branch') || 'main';
-  if (!repo || !token) throw new Error('GitHub not configured');
-
-  var apiUrl = 'https://api.github.com/repos/' + repo + '/contents/' + encodeURIComponent(path) + '?ref=' + encodeURIComponent(branch);
-  var sha = null;
-
-  var getRes = await fetch(apiUrl, { headers: ghHeaders(token) });
-  if (getRes.status === 200) {
-    var getJson = await getRes.json();
-    sha = getJson.sha;
-  } else if (getRes.status !== 404) {
-    throw new Error(await ghErrorMessage(getRes));
-  }
-
-  var body = { message: message, content: b64EncodeUnicode(content), branch: branch };
-  if (sha) body.sha = sha;
-
-  var putRes = await fetch('https://api.github.com/repos/' + repo + '/contents/' + encodeURIComponent(path), {
-    method: 'PUT',
-    headers: Object.assign({ 'Content-Type': 'application/json' }, ghHeaders(token)),
-    body: JSON.stringify(body)
-  });
-  if (!putRes.ok) throw new Error(await ghErrorMessage(putRes));
-  return putRes.json();
-}
-
-// Fetches a file's raw content from GitHub. Returns null if it doesn't exist.
-async function ghGetFile(path) {
-  var repo = localStorage.getItem('gh_repo');
-  var token = localStorage.getItem('gh_token');
-  var branch = localStorage.getItem('gh_branch') || 'main';
-  if (!repo || !token) throw new Error('GitHub not configured');
-
-  var apiUrl = 'https://api.github.com/repos/' + repo + '/contents/' + encodeURIComponent(path) + '?ref=' + encodeURIComponent(branch);
-  var res = await fetch(apiUrl, { headers: ghHeaders(token) });
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error(await ghErrorMessage(res));
-  var json = await res.json();
-  return b64DecodeUnicode(json.content.replace(/\n/g, ''));
-}
-
-async function ghErrorMessage(res) {
-  try {
-    var json = await res.json();
-    return json.message || ('GitHub error ' + res.status);
-  } catch (e) {
-    return 'GitHub error ' + res.status;
-  }
-}
-
-// Pulls content.json from GitHub and merges it into state, used on load and
-// via the manual "Load from GitHub" button so Bureau reflects what's live.
+// ── DEPLOY (via Netlify function — GitHub token lives server-side, never here) ─
+// Pulls the currently-live content.json straight off this site (public, no
+// auth needed) so Bureau reflects whatever's actually published. Runs quietly
+// on load; Publish is the only button the user ever needs to touch.
 async function loadFromGitHub(silent) {
-  var repo = localStorage.getItem('gh_repo');
-  var token = localStorage.getItem('gh_token');
-  if (!repo || !token) {
-    if (!silent) toast('Add your GitHub repo & token first', 'error');
-    return;
-  }
   try {
-    var raw = await ghGetFile('content.json');
-    if (raw) {
-      state.content = JSON.parse(raw);
-      saveContent();
-      if (state.currentView) showView(state.currentView);
-      if (!silent) toast('Loaded latest from GitHub ✓', 'success');
-    } else if (!silent) {
-      toast('No content.json in repo yet — Publish will create it', 'error');
+    var res = await fetch('content.json', { cache: 'no-store' });
+    if (!res.ok) {
+      if (!silent) toast('No published content.json yet — Publish will create it', 'error');
+      return;
     }
+    var data = await res.json();
+    state.content = data;
+    saveContent();
+    if (state.currentView) showView(state.currentView);
+    if (!silent) toast('Loaded latest published content ✓', 'success');
   } catch (err) {
     if (!silent) toast('Load failed: ' + err.message, 'error');
-  }
-}
-
-async function testGhConnection() {
-  var repo = document.getElementById('gh-repo') ? document.getElementById('gh-repo').value.trim() : localStorage.getItem('gh_repo');
-  var token = document.getElementById('gh-token') ? document.getElementById('gh-token').value.trim() : '';
-  if (!token && localStorage.getItem('gh_token')) token = localStorage.getItem('gh_token');
-  if (!repo || !token) { toast('Enter repo and token first', 'error'); return; }
-  try {
-    var res = await fetch('https://api.github.com/repos/' + repo, { headers: ghHeaders(token) });
-    if (res.ok) {
-      var json = await res.json();
-      toast('Connected to ' + json.full_name + ' ✓', 'success');
-    } else {
-      throw new Error(await ghErrorMessage(res));
-    }
-  } catch (err) {
-    toast('Connection failed: ' + err.message, 'error');
   }
 }
 
@@ -422,7 +327,6 @@ function showView(view) {
   else if (view === 'sites-dashboard') pane.innerHTML = viewSites();
   else if (view === 'domains-all' || view === 'domains-unassigned') pane.innerHTML = viewDomains(view);
   else if (view === 'domains-sync') pane.innerHTML = viewNcSync();
-  else if (view === 'settings-github') pane.innerHTML = viewGitHub();
   else if (view === 'settings-site') pane.innerHTML = viewSiteSettings();
   else pane.innerHTML = '<div class="edit-inner"><p style="color:var(--muted);font-size:13px;margin-top:40px;text-align:center">Coming soon</p></div>';
 
@@ -672,35 +576,6 @@ function importDomains(input) {
 }
 
 // ── GITHUB SETTINGS ───────────────────────────────────────────────────────────
-function viewGitHub() {
-  var token = localStorage.getItem('gh_token') ? '••••••••••••' : '';
-  var repo = localStorage.getItem('gh_repo') || '';
-  var branch = localStorage.getItem('gh_branch') || 'main';
-  return '<div class="edit-inner">' +
-    '<div class="sticky-hd"><div class="edit-title">GitHub & Deploy</div><div class="edit-sub">Connect to publish content to your live site</div></div>' +
-    '<div class="card"><div class="card-title">GitHub Connection</div>' +
-    '<div class="field"><label>Repository (owner/repo)</label><input id="gh-repo" value="' + esc(repo) + '" placeholder="e.g. jetenvoieca/jetenvoieca-dashboard"></div>' +
-    '<div class="field"><label>Branch</label><input id="gh-branch" value="' + esc(branch) + '" placeholder="main"></div>' +
-    '<div class="field"><label>Personal Access Token</label><input id="gh-token" type="password" placeholder="' + (token || 'paste token here') + '"></div>' +
-    '<div class="field-hint" style="margin-bottom:14px">Fine-grained token needs Contents: Read & write on this repo. Stored only in your browser — never sent anywhere but api.github.com.</div>' +
-    '<div class="form-actions"><button class="btn-cancel" onclick="testGhConnection()">Test Connection</button><button class="btn-save" onclick="saveGhSettings()">Save</button></div>' +
-    '</div>' +
-    '<div class="card"><div class="card-title">Sync</div>' +
-    '<p style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.6">Publish writes <code>content.json</code> to the repo, which Netlify then deploys. Load pulls down whatever is currently live, in case content was edited elsewhere.</p>' +
-    '<div class="form-actions" style="justify-content:flex-start"><button class="btn-save" onclick="loadFromGitHub()">↓ Load from GitHub</button></div>' +
-    '</div></div>';
-}
-
-function saveGhSettings() {
-  var repo = document.getElementById('gh-repo').value.trim();
-  var branch = document.getElementById('gh-branch').value.trim();
-  var token = document.getElementById('gh-token').value.trim();
-  if (repo) localStorage.setItem('gh_repo', repo);
-  if (branch) localStorage.setItem('gh_branch', branch);
-  if (token) localStorage.setItem('gh_token', token);
-  toast('GitHub settings saved', 'success');
-}
-
 // ── SITE SETTINGS ─────────────────────────────────────────────────────────────
 function viewSiteSettings() {
   var c = state.content.settings || {};
@@ -734,11 +609,9 @@ window.onbeforeunload = function(e) {
   if (state.hasUnsaved) { e.preventDefault(); e.returnValue = ''; return ''; }
 };
 
-// On load, quietly sync with whatever is live on GitHub so Bureau doesn't
+// On load, quietly sync with whatever is live on the site so Bureau doesn't
 // show stale content after edits made from another device.
-if (localStorage.getItem('gh_repo') && localStorage.getItem('gh_token')) {
-  loadFromGitHub(true);
-}
+loadFromGitHub(true);
 </script>
 </body>
 </html>
