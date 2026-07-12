@@ -179,7 +179,6 @@ button,input,textarea,select{font-family:'Jost',sans-serif;font-size:13px;font-w
           <div class="acc-items">
             <button class="acc-item" onclick="showView('domains-unassigned')">Unassigned</button>
             <button class="acc-item" onclick="showView('domains-all')">All Domains</button>
-            <button class="acc-item" onclick="showView('domains-sync')">NC Sync</button>
           </div>
         </div>
       </div>
@@ -885,7 +884,10 @@ function viewDomains(view) {
   var ncData = null;
   try { ncData = JSON.parse(localStorage.getItem('nc_domains') || 'null'); } catch(e) {}
   if (!ncData) {
-    return '<div class="edit-inner"><div class="sticky-hd"><div class="edit-title">Domains</div></div>' +
+    return '<div class="edit-inner"><div class="sticky-hd" style="display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap">' +
+      '<div class="edit-title">Domains</div>' +
+      '<button class="btn-cancel" onclick="showView(\'domains-sync\')">NC Sync</button>' +
+      '</div>' +
       '<p style="color:var(--muted);font-size:13px;text-align:center;margin-top:40px">No domain data yet.<br>Use NC Sync to import your Namecheap domains.</p></div>';
   }
 
@@ -924,8 +926,11 @@ function viewDomains(view) {
   }).join('');
 
   return '<div class="edit-inner">' +
-    '<div class="sticky-hd"><div class="edit-title">' + title + '</div>' +
+    '<div class="sticky-hd" style="display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap">' +
+    '<div><div class="edit-title">' + title + '</div>' +
     '<div class="edit-sub">' + list.length + ' domains · fetched ' + new Date(ncData.fetched).toLocaleDateString('en-GB') + '</div></div>' +
+    '<button class="btn-cancel" onclick="showView(\'domains-sync\')">NC Sync</button>' +
+    '</div>' +
     (list.length === 0 ? '<p style="color:var(--muted);font-size:13px;text-align:center;margin-top:40px">✓ All domains assigned</p>' : '<div>' + rows + '</div>') +
     '</div>';
 }
