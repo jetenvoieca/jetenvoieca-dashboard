@@ -108,6 +108,7 @@ button,input,textarea,select{font-family:'Jost',sans-serif;font-size:13px;font-w
       <div class="preview-dot" style="background:#febc2e"></div>
       <div class="preview-dot" style="background:#28c840"></div>
       <span class="preview-url" id="preview-url">jetenvoieca.com</span>
+      <button class="preview-refresh" id="preview-open-tab" onclick="openFramedSiteNewTab()" title="Some sites block being shown inside another page — open it directly instead" style="display:none">Open in New Tab</button>
       <button class="preview-refresh" onclick="refreshPreview()" title="Refresh">Refresh</button>
     </div>
     <iframe id="preview" src="https://jetenvoieca.com" title="Site preview"></iframe>
@@ -322,10 +323,21 @@ function toggleAcc(id) {
 
 // ── PREVIEW ──────────────────────────────────────────────────────────────────
 var previewMode = 'site'; // 'site' | 'dashboard'
+var framedSite = null;    // the site object currently loaded in the iframe via loadSiteInFrame, if any
 
 function refreshPreview() {
   var iframe = document.getElementById('preview');
   iframe.src = iframe.src;
+}
+
+function openFramedSiteNewTab() {
+  if (framedSite) window.open(framedSite.url, '_blank');
+}
+
+function setFramedSiteButton(site) {
+  var btn = document.getElementById('preview-open-tab');
+  framedSite = site;
+  if (btn) btn.style.display = site ? '' : 'none';
 }
 
 function setPreview(mode) {
@@ -336,6 +348,7 @@ function setPreview(mode) {
 
   wrap.style.display = 'none';
   iframe.style.display = '';
+  setFramedSiteButton(null);
 
   if (mode === 'dashboard') {
     iframe.src = '/dashboard.html';
@@ -370,6 +383,7 @@ function showSiteImage(site) {
   wrap.style.cursor = 'pointer';
   wrap.onclick = function() { loadSiteInFrame(site); };
   urlLabel.textContent = hostnameOf(site.url);
+  setFramedSiteButton(null); // showing the static image, not the framed site yet
 
   img.style.display = '';
   fallback.style.display = 'none';
@@ -383,7 +397,10 @@ function showSiteImage(site) {
   img.alt = site.name;
 }
 
-// Clicking the preview image swaps it for the live site, still in the same pane.
+// Clicking the preview image swaps it for the live site, still in the same
+// pane. Some sites block being framed this way (X-Frame-Options/CSP), which
+// shows as a blank/broken page with no detectable JS error — so the "Open in
+// New Tab" button in the preview bar stays available as a manual fallback.
 function loadSiteInFrame(site) {
   var iframe = document.getElementById('preview');
   var wrap = document.getElementById('preview-image-wrap');
@@ -392,6 +409,7 @@ function loadSiteInFrame(site) {
   iframe.style.display = '';
   iframe.src = site.url;
   urlLabel.textContent = hostnameOf(site.url);
+  setFramedSiteButton(site);
 }
 
 function hostnameOf(url) {
