@@ -21,6 +21,9 @@ button,input,textarea,select{font-family:'Jost',sans-serif;font-size:13px;font-w
 .preview-url{font-size:11px;color:rgba(255,255,255,.45);flex:1;text-align:center;letter-spacing:.04em}
 .preview-refresh{background:none;border:none;color:rgba(255,255,255,.45);cursor:pointer;font-size:15px;padding:4px}
 .preview-refresh:hover{color:white}
+.preview-toggle{background:transparent;border:1px solid rgba(255,255,255,.22);border-radius:4px;color:rgba(255,255,255,.6);cursor:pointer;font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:5px 11px;font-family:'Jost',sans-serif;transition:all .15s}
+.preview-toggle:hover{color:white;border-color:rgba(255,255,255,.4)}
+.preview-toggle.active{background:var(--gold);border-color:var(--gold);color:white}
 .preview-pane iframe{flex:1;width:100%;border:none;display:block}
 
 /* MIDDLE — edit form */
@@ -108,6 +111,7 @@ button,input,textarea,select{font-family:'Jost',sans-serif;font-size:13px;font-w
       <div class="preview-dot" style="background:#febc2e"></div>
       <div class="preview-dot" style="background:#28c840"></div>
       <span class="preview-url" id="preview-url">jetenvoieca.com</span>
+      <button class="preview-toggle" id="preview-toggle" onclick="toggleDashboard()" title="Show the Sites dashboard in this pane">Dashboard</button>
       <button class="preview-refresh" onclick="refreshPreview()" title="Refresh">↺</button>
     </div>
     <iframe id="preview" src="https://jetenvoieca.com" title="Site preview"></iframe>
@@ -300,9 +304,35 @@ function toggleAcc(id) {
 }
 
 // ── PREVIEW ──────────────────────────────────────────────────────────────────
+var previewMode = 'site'; // 'site' | 'dashboard'
+
 function refreshPreview() {
   var iframe = document.getElementById('preview');
   iframe.src = iframe.src;
+}
+
+function setPreview(mode) {
+  var iframe = document.getElementById('preview');
+  var urlLabel = document.getElementById('preview-url');
+  var btn = document.getElementById('preview-toggle');
+  previewMode = mode;
+  if (mode === 'dashboard') {
+    iframe.src = '/dashboard.html';
+    urlLabel.textContent = 'jetenvoieca.com/dashboard';
+    btn.textContent = 'Site';
+    btn.classList.add('active');
+    btn.title = 'Show the live public site in this pane';
+  } else {
+    iframe.src = 'https://jetenvoieca.com';
+    urlLabel.textContent = 'jetenvoieca.com';
+    btn.textContent = 'Dashboard';
+    btn.classList.remove('active');
+    btn.title = 'Show the Sites dashboard in this pane';
+  }
+}
+
+function toggleDashboard() {
+  setPreview(previewMode === 'dashboard' ? 'site' : 'dashboard');
 }
 
 // ── ACTIVE NAV ───────────────────────────────────────────────────────────────
@@ -324,7 +354,7 @@ function showView(view) {
   if (view === 'home') pane.innerHTML = viewHome();
   else if (view === 'story') pane.innerHTML = viewStory();
   else if (view === 'contact') pane.innerHTML = viewContact();
-  else if (view === 'sites-dashboard') pane.innerHTML = viewSites();
+  else if (view === 'sites-dashboard') { pane.innerHTML = viewSites(); setPreview('dashboard'); }
   else if (view === 'domains-all' || view === 'domains-unassigned') pane.innerHTML = viewDomains(view);
   else if (view === 'domains-sync') pane.innerHTML = viewNcSync();
   else if (view === 'settings-site') pane.innerHTML = viewSiteSettings();
@@ -444,11 +474,10 @@ function viewSites() {
 
   return '<div class="edit-inner">' +
     '<div class="sticky-hd"><div class="edit-title">Sites</div>' +
-    '<div class="edit-sub">' + sites.length + ' client sites</div></div>' +
+    '<div class="edit-sub">' + sites.length + ' client sites · shown live in the preview pane</div></div>' +
     (sites.length === 0
       ? '<p style="color:var(--muted);font-size:13px;text-align:center;margin-top:40px">No sites yet — add one from the dashboard</p>'
       : '<div>' + rows + '</div>') +
-    '<div class="form-actions"><a href="/dashboard.html" target="_blank" style="padding:9px 22px;background:var(--noir);color:white;border-radius:4px;font-size:12px;text-decoration:none;letter-spacing:.04em">Open Sites Dashboard →</a></div>' +
     '</div>';
 }
 
