@@ -673,7 +673,35 @@ document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') { closeModal(); closeSettings(); }
 });
 
-renderGrid();
+// On load, pull the latest published sites.json / domains.json (written by
+// Bureau's Publish button) into local storage before rendering, so this page
+// works correctly even in a browser that's never used Bureau before. Editing
+// here still saves locally only — use Bureau's Publish button to push changes
+// (including ones made on this page) back to GitHub.
+async function hydrateFromPublished() {
+  try {
+    var sitesRes = await fetch('sites.json', { cache: 'no-store' });
+    if (sitesRes.ok) {
+      var sitesData = await sitesRes.json();
+      if (Array.isArray(sitesData)) {
+        sites = sitesData;
+        save();
+      }
+    }
+  } catch (e) { /* not published yet, or offline — keep whatever's local */ }
+
+  try {
+    var domainsRes = await fetch('domains.json', { cache: 'no-store' });
+    if (domainsRes.ok) {
+      var domainsData = await domainsRes.json();
+      localStorage.setItem('nc_domains', JSON.stringify(domainsData));
+    }
+  } catch (e) { /* not published yet, or offline */ }
+
+  renderGrid();
+}
+
+hydrateFromPublished();
 </script>
 </body>
 </html>
