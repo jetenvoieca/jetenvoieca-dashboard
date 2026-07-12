@@ -57,15 +57,27 @@ exports.handler = async function (event) {
     return { statusCode: 400, body: JSON.stringify({ error: 'Invalid request body' }) };
   }
 
+  // The filename is picked from a fixed allowlist, never taken directly from
+  // the client — otherwise a client could ask this token to overwrite any
+  // file in the repo (including this function itself).
+  const ALLOWED_TARGETS = {
+    content: 'content.json',
+    sites: 'sites.json',
+    domains: 'domains.json'
+  };
+  const target = body.target || 'content';
+  const filename = ALLOWED_TARGETS[target];
+  if (!filename) {
+    return { statusCode: 400, body: JSON.stringify({ error: 'Unknown target "' + target + '"' }) };
+  }
+
   const content = body.content;
-  const message = body.message || 'Update content.json via Bureau';
+  const message = body.message || ('Update ' + filename + ' via Bureau');
   if (!content) {
     return { statusCode: 400, body: JSON.stringify({ error: 'Missing content' }) };
   }
 
-  // Repo and branch are intentionally NOT taken from the client — always the
-  // server-configured repo, so this token can never be pointed at another repo.
-  const filePath = `/repos/${repo}/contents/content.json`;
+  const filePath = `/repos/${repo}/contents/${filename}`;
 
   try {
     const getResult = await githubRequest('GET', `${filePath}?ref=${branch}`, token);
@@ -91,7 +103,7 @@ exports.handler = async function (event) {
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ok: true, sha: putResult.json.content && putResult.json.content.sha })
+      body: JSON.stringify({ ok: true, file: filename, sha: putResult.json.content && putResult.json.content.sha })
     };
   } catch (err) {
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
