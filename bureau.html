@@ -553,24 +553,40 @@ function renderSitesRows(sites) {
   }
 
   html += sites.map(function(s) {
-    var selected = expandedSiteId === s.id;
-    var row = '<div style="display:flex;align-items:center;padding:10px 0;border-bottom:.5px solid var(--border);gap:10px;' +
-      (selected ? 'background:var(--ivory);margin:0 -8px;padding-left:8px;padding-right:8px;border-radius:4px' : '') + '">' +
-      '<div onclick="selectSite(\'' + s.id + '\')" style="flex:1;min-width:0;cursor:pointer">' +
+    var open = expandedSiteId === s.id;
+    var row = '<div onclick="selectSite(\'' + s.id + '\')" style="display:flex;align-items:center;padding:10px 0;border-bottom:.5px solid var(--border);gap:10px;cursor:pointer;' +
+      (open ? 'background:var(--ivory);margin:0 -8px;padding-left:8px;padding-right:8px;border-radius:4px 4px 0 0' : '') + '">' +
+      '<div style="flex:1;min-width:0">' +
       '<div style="font-family:\'Cormorant Garamond\',serif;font-size:15px;font-style:italic">' + esc(s.name) + '</div>' +
       '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + esc(s.url||'') + '</div></div>' +
       (s.sub_amount ? '<span style="font-size:11px;color:var(--gold);flex-shrink:0">£' + esc(s.sub_amount) + '/mo</span>' : '') +
       (s.verified ? '<span style="width:18px;height:18px;border-radius:50%;background:#2e7d32;color:white;font-size:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0">✓</span>' : '') +
-      '<button class="btn-cancel" style="padding:5px 12px;font-size:11px;flex-shrink:0" onclick="startEditSite(\'' + s.id + '\')">Edit</button>' +
       '</div>';
-    var panel = (editingSiteId === s.id) ? renderSiteEditForm(s) : '';
+    var panel = '';
+    if (editingSiteId === s.id) panel = renderSiteEditForm(s);
+    else if (open) panel = renderSiteDetail(s);
     return row + panel;
   }).join('');
 
   return html;
 }
 
-// Inline edit form shown after clicking Edit on a site row
+// Read-only detail panel, shown alongside the image preview when a row is
+// clicked. Edit (below) is the further step into the actual edit form.
+function renderSiteDetail(s) {
+  return '<div onclick="event.stopPropagation()" style="padding:14px 12px 18px;background:var(--ivory);border-radius:0 0 4px 4px;margin-bottom:2px">' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:12px;margin-bottom:14px">' +
+    '<div><div style="color:var(--muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px">Email</div>' + (esc(s.email) || '—') + '</div>' +
+    '<div><div style="color:var(--muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px">URL</div><a href="' + esc(s.url) + '" target="_blank" style="color:var(--noir)">' + esc(s.url) + '</a></div>' +
+    '<div><div style="color:var(--muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px">Payment</div>' + (esc(s.sub_method) || '—') + (s.sub_amount ? ' · £' + esc(s.sub_amount) + '/mo' : '') + '</div>' +
+    '<div><div style="color:var(--muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px">Domain</div>' + (s.domain_owned ? 'Owned via Namecheap' : 'Not tracked') + (s.nc_expiry ? ' · exp ' + new Date(s.nc_expiry).toLocaleDateString('en-GB') : '') + '</div>' +
+    '</div>' +
+    (s.notes ? '<div style="font-size:12px;margin-bottom:14px"><div style="color:var(--muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px">Notes</div>' + esc(s.notes).replace(/\n/g, '<br>') + '</div>' : '') +
+    '<button class="btn-cancel" onclick="startEditSite(\'' + s.id + '\')">Edit</button>' +
+    '</div>';
+}
+
+// Inline edit form shown after clicking Edit on a site row's detail panel
 function renderSiteEditForm(s) {
   var id = s.id;
   return '<div style="padding:16px 12px 18px;background:var(--ivory);border-radius:0 0 6px 6px;margin-bottom:2px">' +
@@ -645,15 +661,23 @@ function refreshSitesHeader() {
   if (subEl) subEl.textContent = sites.length + ' client sites · £' + mrr(sites).toFixed(0) + '/mo';
 }
 
-// Clicking a site row shows just its screenshot in the preview pane — the
-// row itself already shows name, URL, price, and verified status.
+// Clicking a site row opens both the image preview and the read-only detail
+// panel beneath it. Clicking the same row again collapses both. Edit (inside
+// the detail panel) is the further step into the actual edit form.
 function selectSite(id) {
   addingSite = false;
-  expandedSiteId = id;
-  var sites = [];
-  try { sites = JSON.parse(localStorage.getItem('jv_sites') || '[]'); } catch (e) {}
-  var site = sites.find(function(s) { return s.id === id; });
-  if (site) showSiteImage(site);
+  if (expandedSiteId === id) {
+    expandedSiteId = null;
+    editingSiteId = null;
+    setPreview(previewMode);
+  } else {
+    expandedSiteId = id;
+    editingSiteId = null;
+    var sites = [];
+    try { sites = JSON.parse(localStorage.getItem('jv_sites') || '[]'); } catch (e) {}
+    var site = sites.find(function(s) { return s.id === id; });
+    if (site) showSiteImage(site);
+  }
   refreshSitesList();
 }
 
@@ -984,4 +1008,4 @@ window.onbeforeunload = function(e) {
 loadFromGitHub(true);
 </script>
 </body>
-</html>
+</html
