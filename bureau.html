@@ -346,6 +346,7 @@ function showView(view) {
   else if (view === 'story') pane.innerHTML = viewStory();
   else if (view === 'contact') pane.innerHTML = viewContact();
   else if (view === 'sites-dashboard') { pane.innerHTML = viewSites(); setPreview('dashboard'); }
+  else if (view === 'sites-add') { addingSite = true; pane.innerHTML = viewSites(); setPreview('dashboard'); }
   else if (view === 'domains-all' || view === 'domains-unassigned') pane.innerHTML = viewDomains(view);
   else if (view === 'domains-sync') pane.innerHTML = viewNcSync();
   else if (view === 'settings-site') pane.innerHTML = viewSiteSettings();
@@ -452,6 +453,9 @@ function saveContact() {
 
 // ── SITES DASHBOARD ───────────────────────────────────────────────────────────
 var sitesSearchTerm = '';
+var expandedSiteId = null;  // which site's detail panel is open
+var editingSiteId = null;   // which site is currently in edit mode
+var addingSite = false;     // whether the "new site" form is showing
 
 function viewSites() {
   var sites = [];
@@ -465,6 +469,7 @@ function viewSites() {
       'style="padding:8px 12px;border:.5px solid var(--border);background:white;font-family:inherit;font-size:12px;color:var(--noir);outline:none;border-radius:4px;width:130px">' +
     '<button class="btn-cancel" id="sites-preview-toggle" onclick="toggleDashboard()">' + (previewMode === 'dashboard' ? '⌂ Show Site' : '⊞ Show Dashboard') + '</button>' +
     '<button class="btn-cancel" onclick="exportSitesCSV()">↓ Export CSV</button>' +
+    '<button class="btn-save" style="background:var(--pink)" onclick="startAddSite()">+ Add Site</button>' +
     '</div></div>' +
     '<div id="sites-list">' + renderSitesRows(filterSitesData(sites, sitesSearchTerm)) + '</div>' +
     '</div>';
@@ -479,26 +484,215 @@ function filterSitesData(sites, term) {
 }
 
 function renderSitesRows(sites) {
+  var html = '';
+  if (addingSite) html += renderAddSiteForm();
+
   if (sites.length === 0) {
-    return '<p style="color:var(--muted);font-size:13px;text-align:center;margin-top:40px">No matching sites</p>';
+    if (!addingSite) html += '<p style="color:var(--muted);font-size:13px;text-align:center;margin-top:40px">No matching sites</p>';
+    return html;
   }
-  return sites.map(function(s) {
-    return '<div style="display:flex;align-items:center;padding:10px 0;border-bottom:.5px solid var(--border);gap:12px">' +
+
+  html += sites.map(function(s) {
+    var open = expandedSiteId === s.id;
+    var row = '<div onclick="toggleSiteDetail(\'' + s.id + '\')" style="display:flex;align-items:center;padding:10px 0;border-bottom:.5px solid var(--border);gap:12px;cursor:pointer">' +
       '<div style="flex:1"><div style="font-family:\'Cormorant Garamond\',serif;font-size:15px;font-style:italic">' + esc(s.name) + '</div>' +
       '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + esc(s.url||'') + '</div></div>' +
       (s.sub_amount ? '<span style="font-size:11px;color:var(--gold)">£' + esc(s.sub_amount) + '/mo</span>' : '') +
       (s.verified ? '<span style="width:18px;height:18px;border-radius:50%;background:#2e7d32;color:white;font-size:11px;display:flex;align-items:center;justify-content:center">✓</span>' : '') +
+      '<span style="color:var(--muted);font-size:10px;transition:transform .2s;transform:rotate(' + (open ? '180' : '0') + 'deg)">▾</span>' +
       '</div>';
+    var panel = '';
+    if (open) panel = (editingSiteId === s.id) ? renderSiteEditForm(s) : renderSiteDetail(s);
+    return row + panel;
   }).join('');
+
+  return html;
+}
+
+// Read-only detail panel shown when a site row is clicked
+function renderSiteDetail(s) {
+  return '<div onclick="event.stopPropagation()" style="padding:14px 12px 18px;background:var(--ivory);border-radius:0 0 6px 6px;margin-bottom:2px">' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:12px;margin-bottom:14px">' +
+    '<div><div style="color:var(--muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px">Email</div>' + (esc(s.email) || '—') + '</div>' +
+    '<div><div style="color:var(--muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px">URL</div><a href="' + esc(s.url) + '" target="_blank" style="color:var(--noir)">' + esc(s.url) + '</a></div>' +
+    '<div><div style="color:var(--muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px">Payment</div>' + (esc(s.sub_method) || '—') + (s.sub_amount ? ' · £' + esc(s.sub_amount) + '/mo' : '') + '</div>' +
+    '<div><div style="color:var(--muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px">Domain</div>' + (s.domain_owned ? 'Owned via Namecheap' : 'Not tracked') + (s.nc_expiry ? ' · exp ' + new Date(s.nc_expiry).toLocaleDateString('en-GB') : '') + '</div>' +
+    '</div>' +
+    (s.notes ? '<div style="font-size:12px;margin-bottom:14px"><div style="color:var(--muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px">Notes</div>' + esc(s.notes).replace(/\n/g, '<br>') + '</div>' : '') +
+    '<div style="display:flex;gap:8px">' +
+    '<button class="btn-save" onclick="startEditSite(\'' + s.id + '\')">Edit</button>' +
+    '<button class="btn-cancel" onclick="deleteSiteInline(\'' + s.id + '\')">Delete</button>' +
+    '</div></div>';
+}
+
+// Inline edit form shown after clicking Edit on a site's detail panel
+function renderSiteEditForm(s) {
+  var id = s.id;
+  return '<div onclick="event.stopPropagation()" style="padding:16px 12px 18px;background:var(--ivory);border-radius:0 0 6px 6px;margin-bottom:2px">' +
+    '<div class="field"><label>Name</label><input id="se-name-' + id + '" value="' + esc(s.name) + '"></div>' +
+    '<div class="field"><label>Email</label><input id="se-email-' + id + '" value="' + esc(s.email || '') + '"></div>' +
+    '<div class="field"><label>URL</label><input id="se-url-' + id + '" value="' + esc(s.url) + '"></div>' +
+    '<div class="field-row">' +
+    '<div class="field"><label>Payment Method</label><select id="se-method-' + id + '">' +
+    '<option value=""' + (!s.sub_method ? ' selected' : '') + '>Select…</option>' +
+    '<option' + (s.sub_method === 'Stripe' ? ' selected' : '') + '>Stripe</option>' +
+    '<option' + (s.sub_method === 'PayPal' ? ' selected' : '') + '>PayPal</option>' +
+    '<option' + (s.sub_method === 'Bank Transfer' ? ' selected' : '') + '>Bank Transfer</option>' +
+    '</select></div>' +
+    '<div class="field"><label>Monthly (£)</label><input id="se-amount-' + id + '" value="' + esc(s.sub_amount || '') + '"></div>' +
+    '</div>' +
+    '<div class="field"><label>Notes</label><textarea id="se-notes-' + id + '" rows="3">' + esc(s.notes || '') + '</textarea></div>' +
+    '<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin-bottom:16px;cursor:pointer">' +
+    '<input type="checkbox" id="se-verified-' + id + '" style="width:auto"' + (s.verified ? ' checked' : '') + '> Verified' +
+    '</label>' +
+    '<div class="form-actions">' +
+    '<button class="btn-cancel" onclick="cancelEditSite()">Cancel</button>' +
+    '<button class="btn-save" onclick="saveEditSite(\'' + id + '\')">Save</button>' +
+    '</div></div>';
+}
+
+// Blank form shown when "+ Add Site" is clicked
+function renderAddSiteForm() {
+  return '<div onclick="event.stopPropagation()" style="padding:16px 12px 18px;background:var(--ivory);border-radius:6px;margin-bottom:12px">' +
+    '<div class="card-title" style="margin-bottom:10px">New Site</div>' +
+    '<div class="field"><label>Name</label><input id="sa-name" placeholder="e.g. Louise Dear"></div>' +
+    '<div class="field"><label>Email</label><input id="sa-email" placeholder="client@email.com"></div>' +
+    '<div class="field"><label>URL</label><input id="sa-url" placeholder="e.g. louisedear.com"></div>' +
+    '<div class="field-row">' +
+    '<div class="field"><label>Payment Method</label><select id="sa-method"><option value="">Select…</option><option>Stripe</option><option>PayPal</option><option>Bank Transfer</option></select></div>' +
+    '<div class="field"><label>Monthly (£)</label><input id="sa-amount" placeholder="e.g. 25"></div>' +
+    '</div>' +
+    '<div class="field"><label>Notes</label><textarea id="sa-notes" rows="3"></textarea></div>' +
+    '<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin-bottom:16px;cursor:pointer">' +
+    '<input type="checkbox" id="sa-verified" style="width:auto"> Verified' +
+    '</label>' +
+    '<div class="form-actions">' +
+    '<button class="btn-cancel" onclick="cancelAddSite()">Cancel</button>' +
+    '<button class="btn-save" onclick="saveNewSite()">Save Site</button>' +
+    '</div></div>';
 }
 
 // Re-renders only the rows list, so the search input never loses focus while typing.
 function filterSitesList(term) {
   sitesSearchTerm = term;
+  refreshSitesList();
+}
+
+function refreshSitesList() {
   var sites = [];
   try { sites = JSON.parse(localStorage.getItem('jv_sites') || '[]'); } catch (e) {}
   var container = document.getElementById('sites-list');
-  if (container) container.innerHTML = renderSitesRows(filterSitesData(sites, term));
+  if (container) container.innerHTML = renderSitesRows(filterSitesData(sites, sitesSearchTerm));
+}
+
+// Updates the "N client sites · £X/mo" line without a full pane re-render
+function refreshSitesHeader() {
+  var sites = [];
+  try { sites = JSON.parse(localStorage.getItem('jv_sites') || '[]'); } catch (e) {}
+  var subEl = document.querySelector('#edit-pane .edit-sub');
+  if (subEl) subEl.textContent = sites.length + ' client sites · £' + mrr(sites).toFixed(0) + '/mo';
+}
+
+function toggleSiteDetail(id) {
+  addingSite = false;
+  if (expandedSiteId === id) {
+    expandedSiteId = null;
+    editingSiteId = null;
+  } else {
+    expandedSiteId = id;
+    editingSiteId = null;
+  }
+  refreshSitesList();
+}
+
+function startEditSite(id) {
+  editingSiteId = id;
+  expandedSiteId = id;
+  refreshSitesList();
+}
+
+function cancelEditSite() {
+  editingSiteId = null;
+  refreshSitesList();
+}
+
+function saveEditSite(id) {
+  var name = val('se-name-' + id).trim();
+  var url = val('se-url-' + id).trim();
+  if (!name || !url) { toast('Name and URL are required', 'error'); return; }
+  if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+
+  var sites = [];
+  try { sites = JSON.parse(localStorage.getItem('jv_sites') || '[]'); } catch (e) {}
+  sites = sites.map(function(s) {
+    if (s.id !== id) return s;
+    return Object.assign({}, s, {
+      name: name,
+      email: val('se-email-' + id).trim(),
+      url: url,
+      sub_method: val('se-method-' + id),
+      sub_amount: val('se-amount-' + id).trim(),
+      notes: val('se-notes-' + id).trim(),
+      verified: document.getElementById('se-verified-' + id).checked
+    });
+  });
+  localStorage.setItem('jv_sites', JSON.stringify(sites));
+  editingSiteId = null;
+  toast('Site updated ✓', 'success');
+  refreshSitesList();
+  refreshSitesHeader();
+}
+
+function deleteSiteInline(id) {
+  if (!confirm('Remove this site?')) return;
+  var sites = [];
+  try { sites = JSON.parse(localStorage.getItem('jv_sites') || '[]'); } catch (e) {}
+  sites = sites.filter(function(s) { return s.id !== id; });
+  localStorage.setItem('jv_sites', JSON.stringify(sites));
+  if (expandedSiteId === id) expandedSiteId = null;
+  if (editingSiteId === id) editingSiteId = null;
+  toast('Site removed', 'success');
+  refreshSitesList();
+  refreshSitesHeader();
+}
+
+function startAddSite() {
+  addingSite = true;
+  expandedSiteId = null;
+  editingSiteId = null;
+  refreshSitesList();
+}
+
+function cancelAddSite() {
+  addingSite = false;
+  refreshSitesList();
+}
+
+function saveNewSite() {
+  var name = val('sa-name').trim();
+  var url = val('sa-url').trim();
+  if (!name || !url) { toast('Name and URL are required', 'error'); return; }
+  if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+
+  var sites = [];
+  try { sites = JSON.parse(localStorage.getItem('jv_sites') || '[]'); } catch (e) {}
+  sites.push({
+    id: String(Date.now()),
+    name: name,
+    email: val('sa-email').trim(),
+    url: url,
+    sub_method: val('sa-method'),
+    sub_amount: val('sa-amount').trim(),
+    notes: val('sa-notes').trim(),
+    verified: document.getElementById('sa-verified').checked,
+    domain_owned: false,
+    image: null
+  });
+  localStorage.setItem('jv_sites', JSON.stringify(sites));
+  addingSite = false;
+  toast('Site added ✓', 'success');
+  refreshSitesList();
+  refreshSitesHeader();
 }
 
 function mrr(sites) {
