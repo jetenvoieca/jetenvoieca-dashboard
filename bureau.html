@@ -370,7 +370,7 @@ function setFramedSiteButton(site) {
   if (btn) btn.style.display = site ? '' : 'none';
 }
 
-function setPreview(mode) {
+function setPreview(mode, page) {
   var iframe = document.getElementById('preview');
   var wrap = document.getElementById('preview-image-wrap');
   var urlLabel = document.getElementById('preview-url');
@@ -388,8 +388,9 @@ function setPreview(mode) {
     iframe.src = '/dashboard.html';
     urlLabel.textContent = 'jetenvoieca.com/dashboard';
   } else {
-    iframe.src = '/';
-    urlLabel.textContent = 'jetenvoieca.com';
+    var path = page || 'index.html';
+    iframe.src = '/' + (path === 'index.html' ? '' : path);
+    urlLabel.textContent = 'jetenvoieca.com' + (path === 'index.html' ? '' : '/' + path);
   }
   var btn = document.getElementById('sites-preview-toggle');
   if (btn) btn.textContent = (mode === 'dashboard' ? 'Show Site' : 'Show Dashboard');
@@ -403,12 +404,39 @@ function handlePreviewLoad() {
   if (previewMode === 'site') applyDraftToFrame();
 }
 
+// Detects which page is currently loaded in the frame (by which known
+// elements exist in it) and injects the matching draft content — so this
+// keeps working automatically as more pages get added later.
 function applyDraftToFrame() {
   var iframe = document.getElementById('preview');
   if (!iframe || previewMode !== 'site') return;
   var doc;
   try { doc = iframe.contentDocument; } catch (e) { return; } // cross-origin — leave the last-loaded page as-is
   if (!doc || !doc.getElementById) return;
+
+  if (doc.getElementById('story-title')) {
+    var s = (state.content && state.content.story) || {};
+    setFrameText(doc, 'story-title', s.title); setFrameText(doc, 'story-subtitle', s.subtitle);
+    setFrameText(doc, 'story-c1', s.chapter1); setFrameText(doc, 'story-c2', s.chapter2); setFrameText(doc, 'story-c3', s.chapter3);
+    var hs = (state.content && state.content.home) || {};
+    setFrameText(doc, 'footer-location', hs.location);
+    if (hs.email) {
+      var emailElS = doc.getElementById('footer-email');
+      if (emailElS) { emailElS.textContent = hs.email; emailElS.href = 'mailto:' + hs.email; }
+    }
+    return;
+  }
+
+  if (doc.getElementById('contact-intro')) {
+    var c = (state.content && state.content.contact) || {};
+    setFrameText(doc, 'contact-intro', c.intro);
+    setFrameText(doc, 'contact-location', c.location);
+    if (c.email) {
+      var emailElC = doc.getElementById('contact-email');
+      if (emailElC) { emailElC.textContent = c.email; emailElC.href = 'mailto:' + c.email; }
+    }
+    return;
+  }
 
   var h = (state.content && state.content.home) || {};
   setFrameText(doc, 'eyebrow-1', h.eyebrow1); setFrameText(doc, 'title-1', h.title1); setFrameText(doc, 'body-1', h.body1);
@@ -519,13 +547,13 @@ function showView(view) {
   setActiveNav(view);
   var pane = document.getElementById('edit-pane');
 
-  if (view === 'home') { pane.innerHTML = viewHome(); setPreview('site'); }
-  else if (view === 'story') { pane.innerHTML = viewStory(); setPreview('site'); }
-  else if (view === 'contact') { pane.innerHTML = viewContact(); setPreview('site'); }
+  if (view === 'home') { pane.innerHTML = viewHome(); setPreview('site', 'index.html'); }
+  else if (view === 'story') { pane.innerHTML = viewStory(); setPreview('site', 'story.html'); }
+  else if (view === 'contact') { pane.innerHTML = viewContact(); setPreview('site', 'contact.html'); }
   else if (view === 'sites-dashboard') { pane.innerHTML = viewSites(); setPreview('dashboard'); }
   else if (view === 'domains-all' || view === 'domains-unassigned') pane.innerHTML = viewDomains(view);
   else if (view === 'domains-sync') pane.innerHTML = viewNcSync();
-  else if (view === 'settings-site') { pane.innerHTML = viewSiteSettings(); setPreview('site'); }
+  else if (view === 'settings-site') { pane.innerHTML = viewSiteSettings(); setPreview('site', 'index.html'); }
   else if (view === 'financial-accounts') pane.innerHTML = viewFinancialAccounts();
   else if (view === 'financial-settings') pane.innerHTML = viewFinancialSettings();
   else pane.innerHTML = '<div class="edit-inner"><p style="color:var(--muted);font-size:13px;margin-top:40px;text-align:center">Coming soon</p></div>';
@@ -620,6 +648,7 @@ function onStoryFieldChange() {
     title: val('s-title'), subtitle: val('s-sub'),
     chapter1: val('s-c1'), chapter2: val('s-c2'), chapter3: val('s-c3')
   };
+  applyDraftToFrame();
   autosaveContent();
 }
 
@@ -641,6 +670,7 @@ function onContactFieldChange() {
   state.content.contact = {
     email: val('c-email'), location: val('c-location'), intro: val('c-intro')
   };
+  applyDraftToFrame();
   autosaveContent();
 }
 
