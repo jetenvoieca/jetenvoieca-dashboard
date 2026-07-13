@@ -180,8 +180,8 @@ nav a.active{font-style:normal;opacity:.85}
 
     <div>
       <div class="wordmark">Jetenvoieca</div>
-      <nav>
-        <a href="#" class="active">Home</a>
+      <nav id="site-nav">
+        <a href="index.html" class="active">Home</a>
         <a href="story.html">Story</a>
         <a href="contact.html">Contact</a>
       </nav>
@@ -213,13 +213,16 @@ nav a.active{font-style:normal;opacity:.85}
   </div>
 </div>
 
+<script src="nav.js"></script>
 <script>
 // Pulls live copy from content.json (published by Bureau). If the fetch fails
 // or a field is missing, the static text already in this HTML stays as-is.
 fetch('content.json', { cache: 'no-store' })
   .then(function(r) { return r.ok ? r.json() : null; })
   .then(function(data) {
-    if (!data || !data.home) return;
+    if (!data) return;
+    renderSiteNav(data, 'index.html');
+    if (!data.home) return;
     var h = data.home;
     setText('eyebrow-1', h.eyebrow1); setText('title-1', h.title1); setText('body-1', h.body1);
     setText('eyebrow-2', h.eyebrow2); setText('title-2', h.title2); setText('body-2', h.body2);
