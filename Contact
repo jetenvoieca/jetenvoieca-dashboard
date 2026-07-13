@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contact — Jetenvoieca</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=Inter:wght@300;400&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',sans-serif;background:#F0E8C8;color:#1a1714;min-height:100vh}
+
+.wrap{max-width:640px;margin:0 auto;padding:56px 32px 80px}
+
+.top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:80px;flex-wrap:wrap;gap:20px}
+.wordmark{
+  font-family:'Cormorant Garamond',serif;
+  font-size:11px;font-weight:300;
+  letter-spacing:.32em;text-transform:uppercase;
+  color:#1a1714;opacity:.55;text-decoration:none;
+}
+nav{display:flex;gap:22px}
+nav a{
+  font-family:'Cormorant Garamond',serif;
+  font-size:17px;font-weight:300;font-style:italic;
+  letter-spacing:.06em;color:#1a1714;text-decoration:none;
+  opacity:.4;transition:opacity .2s;
+}
+nav a:hover,nav a.active{opacity:1}
+nav a.active{font-style:normal;opacity:.85}
+
+h1{
+  font-family:'Cormorant Garamond',serif;
+  font-size:44px;font-weight:300;line-height:1.1;
+  margin-bottom:28px;
+}
+.intro{
+  font-size:14px;line-height:1.85;
+  color:rgba(26,23,20,0.72);
+  letter-spacing:.015em;
+  margin-bottom:56px;
+  max-width:480px;
+}
+
+.detail{margin-bottom:26px}
+.detail-label{
+  font-size:9px;letter-spacing:.18em;text-transform:uppercase;
+  color:rgba(26,23,20,0.4);margin-bottom:6px;
+}
+.detail-value{
+  font-family:'Cormorant Garamond',serif;
+  font-size:22px;font-style:italic;
+  color:#1a1714;
+}
+.detail-value a{color:inherit;text-decoration:none;border-bottom:0.5px solid rgba(26,23,20,0.3)}
+.detail-value a:hover{border-color:#B8561E;color:#B8561E}
+
+.footer-area{margin-top:80px;padding-top:24px;border-top:0.5px solid rgba(26,23,20,0.18)}
+.footer-area span{
+  font-size:9px;letter-spacing:.18em;text-transform:uppercase;
+  color:rgba(26,23,20,0.35);
+}
+
+@media(max-width:600px){
+  h1{font-size:32px}
+  .top{margin-bottom:56px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="top">
+    <a href="index.html" class="wordmark">Jetenvoieca</a>
+    <nav>
+      <a href="index.html">Home</a>
+      <a href="story.html">Story</a>
+      <a href="contact.html" class="active">Contact</a>
+    </nav>
+  </div>
+
+  <h1>Get in touch</h1>
+  <div class="intro" id="contact-intro">Whether you're an artist looking for a website, a retailer interested in serendipitous discovery, or simply want to talk design — get in touch.</div>
+
+  <div class="detail">
+    <div class="detail-label">Email</div>
+    <div class="detail-value"><a href="mailto:craig@jetenvoieca.com" id="contact-email">craig@jetenvoieca.com</a></div>
+  </div>
+
+  <div class="detail">
+    <div class="detail-label">Location</div>
+    <div class="detail-value" id="contact-location">Near Narbonne, Aude, South of France</div>
+  </div>
+
+  <div class="footer-area">
+    <span>Aude · South of France</span>
+  </div>
+
+</div>
+
+<script>
+fetch('content.json', { cache: 'no-store' })
+  .then(function(r) { return r.ok ? r.json() : null; })
+  .then(function(data) {
+    if (!data) return;
+    var c = data.contact || {};
+    setText('contact-intro', c.intro);
+    setText('contact-location', c.location);
+    if (c.email) {
+      var emailEl = document.getElementById('contact-email');
+      if (emailEl) { emailEl.textContent = c.email; emailEl.href = 'mailto:' + c.email; }
+    }
+  })
+  .catch(function() { /* offline or first deploy — static copy stands */ });
+
+function setText(id, value) {
+  if (!value) return;
+  var el = document.getElementById(id);
+  if (el) el.textContent = value;
+}
+</script>
+</body>
+</html>
