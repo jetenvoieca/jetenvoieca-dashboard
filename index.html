@@ -188,17 +188,17 @@ nav a.active{font-style:normal;opacity:.85}
     </div>
 
     <div class="messages">
-      <div class="msg" onclick="window.location='artists.html'">
+      <div class="msg" id="msg-1" onclick="window.location='artists.html'">
         <div class="msg-eyebrow" id="eyebrow-1">Artists</div>
         <div class="msg-title" id="title-1">Websites for Artists</div>
         <div class="msg-body" id="body-1">Beautiful, minimal portfolio sites. Built to show the work, not obscure it. Every site different. Every artist served.</div>
       </div>
-      <div class="msg" onclick="window.location='retail.html'">
+      <div class="msg" id="msg-2" onclick="window.location='retail.html'">
         <div class="msg-eyebrow" id="eyebrow-2">Commerce</div>
         <div class="msg-title" id="title-2">Serendipity for Online Retail</div>
         <div class="msg-body" id="body-2">Discovery without search. A white-label layer that lets customers browse and find what they didn't know they wanted — alongside existing retail infrastructure.</div>
       </div>
-      <div class="msg" onclick="window.location='story.html'">
+      <div class="msg" id="msg-3" onclick="window.location='story.html'">
         <div class="msg-eyebrow" id="eyebrow-3">Studio</div>
         <div class="msg-title" id="title-3">Design that works differently</div>
         <div class="msg-body" id="body-3">Systems built from the user outward. Unconventional, accessible, effective. Users have loved them. IT departments have not.</div>
@@ -224,6 +224,7 @@ fetch('content.json', { cache: 'no-store' })
     setText('eyebrow-1', h.eyebrow1); setText('title-1', h.title1); setText('body-1', h.body1);
     setText('eyebrow-2', h.eyebrow2); setText('title-2', h.title2); setText('body-2', h.body2);
     setText('eyebrow-3', h.eyebrow3); setText('title-3', h.title3); setText('body-3', h.body3);
+    setLink('msg-1', h.link1); setLink('msg-2', h.link2); setLink('msg-3', h.link3);
     setText('footer-location', h.location);
     if (h.email) {
       var emailEl = document.getElementById('footer-email');
@@ -242,6 +243,12 @@ function setText(id, value) {
   if (!value) return;
   var el = document.getElementById(id);
   if (el) el.textContent = value;
+}
+
+function setLink(id, value) {
+  if (!value) return;
+  var el = document.getElementById(id);
+  if (el) el.setAttribute('onclick', "window.location='" + value.replace(/'/g, "") + "'");
 }
 </script>
 </body>
