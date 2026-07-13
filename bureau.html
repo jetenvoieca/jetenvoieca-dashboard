@@ -59,6 +59,8 @@ button,input,textarea,select{font-family:'Jost',sans-serif;font-size:13px;font-w
 .acc-item{width:100%;padding:8px 12px;border:none;background:transparent;font-family:'Jost',sans-serif;font-size:13px;font-weight:300;color:rgba(255,255,255,.65);text-align:left;cursor:pointer;border-radius:5px;display:flex;align-items:center;gap:8px;transition:background .15s,color .15s;margin-bottom:1px}
 .acc-item:hover{background:rgba(255,255,255,.06);color:#fff}
 .acc-item.active{background:var(--gold);color:white;font-weight:400}
+.acc-item.dragging{opacity:.35}
+.acc-item.drag-over{box-shadow:inset 0 2px 0 var(--gold)}
 .nav-divider{height:.5px;background:rgba(255,255,255,.08);margin:8px 3px}
 .nav-wordmark{padding:14px 14px 8px;font-family:'Cormorant Garamond',serif;font-size:13px;font-style:italic;color:rgba(255,255,255,.25);letter-spacing:.08em}
 
@@ -147,14 +149,7 @@ button,input,textarea,select{font-family:'Jost',sans-serif;font-size:13px;font-w
           Pages <span class="chev">▼</span>
         </button>
         <div class="acc-body open" id="acc-body-pages">
-          <div class="acc-items">
-            <button class="acc-item" onclick="showView('home')">Home</button>
-            <button class="acc-item" onclick="showView('artists')">Artists</button>
-            <button class="acc-item" onclick="showView('retail')">Commerce</button>
-            <button class="acc-item" onclick="showView('story')">Story</button>
-            <button class="acc-item" onclick="showView('contact')">Contact</button>
-            <button class="acc-item" onclick="showView('settings-site')">Site Settings</button>
-          </div>
+          <div class="acc-items" id="acc-items-pages"></div>
         </div>
       </div>
 
@@ -198,18 +193,6 @@ button,input,textarea,select{font-family:'Jost',sans-serif;font-size:13px;font-w
         </div>
       </div>
 
-      <!-- CUSTOM PAGES -->
-      <div class="acc-group">
-        <button class="acc-hd" id="acc-custompages" onclick="toggleAcc('custompages')">
-          Custom Pages <span class="chev">▼</span>
-        </button>
-        <div class="acc-body" id="acc-body-custompages">
-          <div class="acc-items">
-            <button class="acc-item" onclick="showView('custom-pages')">All Pages</button>
-          </div>
-        </div>
-      </div>
-
     </div>
   </div>
 
@@ -248,6 +231,7 @@ async function loadAllFromGitHub(silent) {
   } catch (err) { state.domains = null; }
 
   state.loaded = true;
+  renderPagesNav();
   if (state.currentView) showView(state.currentView);
   if (!silent) {
     if (contentOk) toast('Loaded from GitHub ✓', 'success');
@@ -599,7 +583,12 @@ function showView(view) {
   else if (view === 'settings-site') { pane.innerHTML = viewSiteSettings(); setPreview('site', 'index.html'); }
   else if (view === 'financial-accounts') pane.innerHTML = viewFinancialAccounts();
   else if (view === 'financial-settings') pane.innerHTML = viewFinancialSettings();
-  else if (view === 'custom-pages') pane.innerHTML = viewCustomPages();
+  else if (view.indexOf('page:') === 0) {
+    var pgId = view.slice(5);
+    pane.innerHTML = viewSingleCustomPage(pgId);
+    var pg = findPage(pgId);
+    setPreview('site', 'page.html?slug=' + encodeURIComponent(pg ? pg.slug : ''));
+  }
   else pane.innerHTML = '<div class="edit-inner"><p style="color:var(--muted);font-size:13px;margin-top:40px;text-align:center">Coming soon</p></div>';
 
   wireView(view);
@@ -687,6 +676,9 @@ function viewStory() {
     '<div class="field"><label>Chapter 2 — The Work</label><textarea id="s-c2" oninput="onStoryFieldChange()" rows="6">' + esc(c.chapter2||'My passion for design, practicability and useability have driven me all my life. I designed systems for lawyers, banks, car leasing, government departments — successfully in the 1990s. The IT departments hated them because they didn\'t conform. Users loved them. In one government department they had to rotate users on to our system to avoid a strike.') + '</textarea></div>' +
     '<div class="field"><label>Chapter 3 — The Philosophy</label><textarea id="s-c3" oninput="onStoryFieldChange()" rows="5">' + esc(c.chapter3||'Different and better are key to me. I try to keep all functionality accessible — deep menu structures I hate. Minimalist, elegant, effective. Content left, actions right.') + '</textarea></div>' +
     '</div>' +
+
+    '<div class="card"><label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);cursor:pointer">' +
+    '<input type="checkbox" id="s-inmenu" onchange="setInMenu(\'story\',\'story\',this.checked)" style="width:auto"' + (isInMenu('story','story') ? ' checked' : '') + '> Show in main menu</label></div>' +
     '</div>';
 }
 
@@ -710,6 +702,9 @@ function viewContact() {
     '<div class="field"><label>Location</label><input id="c-location" oninput="onContactFieldChange()" value="' + esc(c.location||'Near Narbonne, Aude, South of France') + '"></div>' +
     '<div class="field"><label>Intro Message</label><textarea id="c-intro" oninput="onContactFieldChange()" rows="4">' + esc(c.intro||'Whether you\'re an artist looking for a website, a retailer interested in serendipitous discovery, or simply want to talk design — get in touch.') + '</textarea></div>' +
     '</div>' +
+
+    '<div class="card"><label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);cursor:pointer">' +
+    '<input type="checkbox" id="c-inmenu" onchange="setInMenu(\'contact\',\'contact\',this.checked)" style="width:auto"' + (isInMenu('contact','contact') ? ' checked' : '') + '> Show in main menu</label></div>' +
     '</div>';
 }
 
@@ -731,7 +726,10 @@ function viewArtists() {
     '<div class="field"><label>Title</label><input id="a-title" oninput="onArtistsFieldChange()" value="' + esc(a.title||'Websites for Artists') + '"></div>' +
     '<div class="field"><label>Body</label><textarea id="a-body" oninput="onArtistsFieldChange()" rows="4">' + esc(a.body||'Beautiful, minimal portfolio sites. Built to show the work, not obscure it. Every site different. Every artist served.') + '</textarea></div>' +
     '<div class="field"><label>Call to Action Text</label><input id="a-cta" oninput="onArtistsFieldChange()" value="' + esc(a.cta||'Get in touch') + '"></div>' +
-    '</div></div>';
+    '</div>' +
+    '<div class="card"><label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);cursor:pointer">' +
+    '<input type="checkbox" id="a-inmenu" onchange="setInMenu(\'artists\',\'artists\',this.checked)" style="width:auto"' + (isInMenu('artists','artists') ? ' checked' : '') + '> Show in main menu</label></div>' +
+    '</div>';
 }
 
 function onArtistsFieldChange() {
@@ -752,7 +750,10 @@ function viewRetail() {
     '<div class="field"><label>Title</label><input id="r-title" oninput="onRetailFieldChange()" value="' + esc(r.title||'Serendipity for Online Retail') + '"></div>' +
     '<div class="field"><label>Body</label><textarea id="r-body" oninput="onRetailFieldChange()" rows="4">' + esc(r.body||'Discovery without search. A white-label layer that lets customers browse and find what they didn\'t know they wanted — alongside existing retail infrastructure.') + '</textarea></div>' +
     '<div class="field"><label>Call to Action Text</label><input id="r-cta" oninput="onRetailFieldChange()" value="' + esc(r.cta||'Get in touch') + '"></div>' +
-    '</div></div>';
+    '</div>' +
+    '<div class="card"><label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);cursor:pointer">' +
+    '<input type="checkbox" id="r-inmenu" onchange="setInMenu(\'retail\',\'retail\',this.checked)" style="width:auto"' + (isInMenu('retail','retail') ? ' checked' : '') + '> Show in main menu</label></div>' +
+    '</div>';
 }
 
 function onRetailFieldChange() {
@@ -1252,57 +1253,144 @@ function onFinancialSettingsFieldChange() {
   autosaveContent();
 }
 
-// ── CUSTOM PAGES ─────────────────────────────────────────────────────────────
+// ── PAGES NAV (bespoke + custom, unified, draggable) ──────────────────────────
+// The sidebar Pages list is generated from state.content.navPages — an
+// ordered list of {id, kind, inMenu}. Bespoke pages (home/story/contact/
+// artists/retail) have fixed labels/hrefs; custom pages look themselves up
+// from state.content.pages by id. Drag-and-drop reorders this same array,
+// which is also what drives the live site's menu via nav.js.
+var BESPOKE_PAGES = {
+  home:    { label: 'Home',     view: 'home' },
+  story:   { label: 'Story',    view: 'story' },
+  contact: { label: 'Contact',  view: 'contact' },
+  artists: { label: 'Artists',  view: 'artists' },
+  retail:  { label: 'Commerce', view: 'retail' }
+};
+
+function getNavPages() {
+  if (!state.content.navPages) {
+    state.content.navPages = [
+      { id: 'home', kind: 'home', inMenu: true },
+      { id: 'story', kind: 'story', inMenu: true },
+      { id: 'contact', kind: 'contact', inMenu: true },
+      { id: 'artists', kind: 'artists', inMenu: false },
+      { id: 'retail', kind: 'retail', inMenu: false }
+    ];
+  }
+  var navPages = state.content.navPages;
+  var pages = state.content.pages || [];
+
+  // Drop entries for custom pages that no longer exist
+  navPages = navPages.filter(function(e) {
+    if (e.kind !== 'custom') return true;
+    return pages.some(function(p) { return p.id === e.id; });
+  });
+  // Add any custom pages missing from the order (new ones default into the menu)
+  pages.forEach(function(p) {
+    if (!navPages.some(function(e) { return e.kind === 'custom' && e.id === p.id; })) {
+      navPages.push({ id: p.id, kind: 'custom', inMenu: true });
+    }
+  });
+
+  state.content.navPages = navPages;
+  return navPages;
+}
+
+function navLabelFor(entry) {
+  if (entry.kind === 'custom') {
+    var p = findPage(entry.id);
+    return (p && p.title) || 'Untitled Page';
+  }
+  var b = BESPOKE_PAGES[entry.kind];
+  return b ? b.label : entry.kind;
+}
+
+function navViewFor(entry) {
+  if (entry.kind === 'custom') return 'page:' + entry.id;
+  var b = BESPOKE_PAGES[entry.kind];
+  return b ? b.view : entry.kind;
+}
+
+function isInMenu(id, kind) {
+  var entry = getNavPages().find(function(e) { return e.kind === kind && e.id === id; });
+  return entry ? !!entry.inMenu : false;
+}
+
+function setInMenu(id, kind, checked) {
+  var entry = getNavPages().find(function(e) { return e.kind === kind && e.id === id; });
+  if (entry) entry.inMenu = checked;
+  renderPagesNav();
+  autosaveContent();
+}
+
+function renderPagesNav() {
+  var container = document.getElementById('acc-items-pages');
+  if (!container) return;
+  var navPages = getNavPages();
+  var html = navPages.map(function(entry, idx) {
+    return '<button class="acc-item" draggable="true" data-idx="' + idx + '" ' +
+      'ondragstart="navDragStart(event,' + idx + ')" ' +
+      'ondragover="navDragOver(event,' + idx + ')" ' +
+      'ondragleave="navDragLeave(event)" ' +
+      'ondrop="navDrop(event,' + idx + ')" ' +
+      'ondragend="navDragEnd(event)" ' +
+      'onclick="showView(\'' + navViewFor(entry) + '\')">' + esc(navLabelFor(entry)) + '</button>';
+  }).join('');
+  html += '<button class="acc-item" onclick="showView(\'settings-site\')">Site Settings</button>';
+  html += '<button class="acc-item" onclick="addCustomPageFromSidebar()">Add Page</button>';
+  container.innerHTML = html;
+  setActiveNav(state.currentView);
+}
+
+var navDragFromIndex = null;
+
+function navDragStart(e, idx) {
+  navDragFromIndex = idx;
+  e.currentTarget.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+}
+
+function navDragOver(e, idx) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  e.currentTarget.classList.add('drag-over');
+}
+
+function navDragLeave(e) {
+  e.currentTarget.classList.remove('drag-over');
+}
+
+function navDragEnd(e) {
+  e.currentTarget.classList.remove('dragging');
+  document.querySelectorAll('.acc-item.drag-over').forEach(function(el) { el.classList.remove('drag-over'); });
+}
+
+function navDrop(e, idx) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  if (navDragFromIndex === null || navDragFromIndex === idx) return;
+  var navPages = getNavPages();
+  var moved = navPages.splice(navDragFromIndex, 1)[0];
+  navPages.splice(idx, 0, moved);
+  state.content.navPages = navPages;
+  navDragFromIndex = null;
+  renderPagesNav();
+  autosaveContent();
+}
+
+// ── CUSTOM PAGES (data + editor) ──────────────────────────────────────────────
 // Generic pages, all rendered by the single page.html template (?slug=xxx) so
 // adding one is just a content.json entry — no new files, no repo-write risk.
-var expandedPageId = null;
-var editingPageId = null;
+function findPage(id) {
+  return (state.content.pages || []).find(function(p) { return p.id === id; });
+}
 
-function viewCustomPages() {
-  var pages = state.content.pages || [];
+function viewSingleCustomPage(id) {
+  var p = findPage(id);
+  if (!p) return '<div class="edit-inner"><p style="color:var(--muted);font-size:13px;text-align:center;margin-top:40px">Page not found</p></div>';
   return '<div class="edit-inner">' +
-    '<div class="sticky-hd" style="display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap">' +
-    '<div><div class="edit-title">Pages</div><div class="edit-sub">' + pages.length + ' custom page' + (pages.length === 1 ? '' : 's') + '</div></div>' +
-    '<button class="btn-cancel" onclick="startAddPage()">Add Page</button>' +
-    '</div>' +
-    '<div id="pages-list">' + renderPagesRows(pages) + '</div>' +
-    '</div>';
-}
-
-function renderPagesRows(pages) {
-  if (pages.length === 0) {
-    return '<p style="color:var(--muted);font-size:13px;text-align:center;margin-top:40px">No custom pages yet</p>';
-  }
-  return pages.map(function(p) {
-    var open = expandedPageId === p.id;
-    var hidden = p.visible === false;
-    var row = '<div onclick="selectPage(\'' + p.id + '\')" style="display:flex;align-items:center;padding:10px 0;gap:10px;cursor:pointer;' +
-      (open ? 'background:var(--ivory);margin:0 -8px;padding-left:8px;padding-right:8px;border-radius:4px 4px 0 0' : 'border-bottom:.5px solid var(--border)') + '">' +
-      '<div style="flex:1;min-width:0">' +
-      '<div style="font-family:\'Cormorant Garamond\',serif;font-size:15px;font-style:italic">' + (esc(p.title) || '<span style="color:var(--muted);font-style:normal">Untitled page</span>') + '</div>' +
-      '<div style="font-size:11px;color:var(--muted);margin-top:2px">/page.html?slug=' + esc(p.slug||'') + '</div></div>' +
-      '<span style="font-size:10px;flex-shrink:0;border-radius:10px;padding:2px 9px;border:.5px solid ' + (hidden ? 'var(--border);color:var(--muted)' : '#2e7d32;color:#2e7d32') + '">' + (hidden ? 'Hidden' : 'Visible') + '</span>' +
-      '</div>';
-    var panel = '';
-    if (editingPageId === p.id) panel = renderPageEditForm(p);
-    else if (open) panel = renderPageDetail(p);
-    return row + panel;
-  }).join('');
-}
-
-function renderPageDetail(p) {
-  var preview = (p.body || '').slice(0, 160);
-  if ((p.body || '').length > 160) preview += '…';
-  return '<div onclick="event.stopPropagation()" style="margin:0 -8px;padding:10px 8px 12px;background:var(--ivory);border-radius:0 0 4px 4px;border-bottom:.5px solid var(--border)">' +
-    (p.eyebrow ? '<div style="font-size:10px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px">' + esc(p.eyebrow) + '</div>' : '') +
-    '<div style="font-size:12px;color:rgba(26,23,20,.7);line-height:1.6;margin-bottom:12px">' + esc(preview || '—') + '</div>' +
-    '<button class="btn-cancel" onclick="startEditPage(\'' + p.id + '\')">Edit</button>' +
-    '</div>';
-}
-
-function renderPageEditForm(p) {
-  var id = p.id;
-  return '<div onclick="event.stopPropagation()" style="padding:16px 12px 18px;background:var(--ivory);border-radius:0 0 6px 6px;margin-bottom:2px">' +
+    '<div class="sticky-hd"><div class="edit-title">' + (esc(p.title) || 'Untitled Page') + '</div><div class="edit-sub">Custom page</div></div>' +
+    '<div class="card">' +
     '<div class="field"><label>Title</label><input id="pg-title-' + id + '" oninput="onPageFieldChange(\'' + id + '\')" value="' + esc(p.title) + '"></div>' +
     '<div class="field"><label>Eyebrow (optional)</label><input id="pg-eyebrow-' + id + '" oninput="onPageFieldChange(\'' + id + '\')" value="' + esc(p.eyebrow||'') + '"></div>' +
     '<div class="field"><label>URL Slug</label><input id="pg-slug-' + id + '" oninput="onPageSlugChange(\'' + id + '\')" value="' + esc(p.slug||'') + '">' +
@@ -1310,65 +1398,15 @@ function renderPageEditForm(p) {
     '<div class="field"><label>Image (optional)</label>' +
     (p.image ? '<img src="' + p.image + '" style="max-height:90px;border-radius:4px;margin-bottom:8px;display:block">' : '') +
     '<input type="file" id="pg-image-' + id + '" accept="image/*" onchange="onPageImageChange(\'' + id + '\')" style="padding:6px 0"></div>' +
-    '<div class="field"><label>Body</label><textarea id="pg-body-' + id + '" oninput="onPageFieldChange(\'' + id + '\')" rows="6">' + esc(p.body||'') + '</textarea></div>' +
-    '<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin-bottom:16px;cursor:pointer">' +
+    '<div class="field"><label>Body</label><textarea id="pg-body-' + id + '" oninput="onPageFieldChange(\'' + id + '\')" rows="8">' + esc(p.body||'') + '</textarea></div>' +
+    '<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin-bottom:10px;cursor:pointer">' +
     '<input type="checkbox" id="pg-visible-' + id + '" onchange="onPageFieldChange(\'' + id + '\')" style="width:auto"' + (p.visible !== false ? ' checked' : '') + '> Visible on the live site' +
     '</label>' +
-    '<div class="form-actions">' +
-    '<button class="btn-cancel" onclick="deletePageInline(\'' + id + '\')">Delete</button>' +
-    '<button class="btn-save" onclick="closePageForm(\'' + id + '\')">Done</button>' +
+    '<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin-bottom:16px;cursor:pointer">' +
+    '<input type="checkbox" id="pg-inmenu-' + id + '" onchange="onPageMenuChange(\'' + id + '\')" style="width:auto"' + (isInMenu(id,'custom') ? ' checked' : '') + '> Show in main menu' +
+    '</label>' +
+    '<div class="form-actions"><button class="btn-cancel" onclick="deletePageAndGoHome(\'' + id + '\')">Delete Page</button></div>' +
     '</div></div>';
-}
-
-function refreshPagesList() {
-  var container = document.getElementById('pages-list');
-  if (container) container.innerHTML = renderPagesRows(state.content.pages || []);
-}
-
-function refreshPagesHeader() {
-  var subEl = document.querySelector('#edit-pane .edit-sub');
-  var n = (state.content.pages || []).length;
-  if (subEl) subEl.textContent = n + ' custom page' + (n === 1 ? '' : 's');
-}
-
-function findPage(id) {
-  return (state.content.pages || []).find(function(p) { return p.id === id; });
-}
-
-function selectPage(id) {
-  if (expandedPageId === id) {
-    expandedPageId = null;
-    editingPageId = null;
-    setPreview(previewMode);
-  } else {
-    expandedPageId = id;
-    editingPageId = null;
-    var p = findPage(id);
-    if (p) setPreview('site', 'page.html?slug=' + encodeURIComponent(p.slug || ''));
-  }
-  refreshPagesList();
-}
-
-function startEditPage(id) {
-  editingPageId = id;
-  expandedPageId = id;
-  var p = findPage(id);
-  if (p) setPreview('site', 'page.html?slug=' + encodeURIComponent(p.slug || ''));
-  refreshPagesList();
-}
-
-// Closing an untouched just-created page quietly removes it, same pattern as Sites.
-function closePageForm(id) {
-  var p = findPage(id);
-  if (p && !p.title && !p.body) {
-    state.content.pages = (state.content.pages || []).filter(function(x) { return x.id !== id; });
-    autosaveContent();
-  }
-  editingPageId = null;
-  expandedPageId = null;
-  setPreview(previewMode);
-  refreshPagesList();
-  refreshPagesHeader();
 }
 
 function slugify(str) {
@@ -1396,8 +1434,14 @@ function onPageFieldChange(id) {
       visible: document.getElementById('pg-visible-' + id).checked
     });
   });
+  renderPagesNav();
   applyDraftToFrame();
   autosaveContent();
+}
+
+function onPageMenuChange(id) {
+  var checked = document.getElementById('pg-inmenu-' + id).checked;
+  setInMenu(id, 'custom', checked);
 }
 
 function onPageSlugChange(id) {
@@ -1407,7 +1451,7 @@ function onPageSlugChange(id) {
   state.content.pages = (state.content.pages || []).map(function(p) {
     return p.id === id ? Object.assign({}, p, { slug: slug }) : p;
   });
-  setPreview('site', 'page.html?slug=' + encodeURIComponent(slug)); // URL changed, reload to it
+  setPreview('site', 'page.html?slug=' + encodeURIComponent(slug)); // URL changed — reload to it
   autosaveContent();
 }
 
@@ -1427,28 +1471,26 @@ async function onPageImageChange(id) {
   autosaveContent();
 }
 
-function deletePageInline(id) {
+function deletePageAndGoHome(id) {
   if (!confirm('Delete this page?')) return;
   state.content.pages = (state.content.pages || []).filter(function(p) { return p.id !== id; });
-  if (expandedPageId === id) { expandedPageId = null; setPreview(previewMode); }
-  editingPageId = null;
+  state.content.navPages = (state.content.navPages || []).filter(function(e) { return !(e.kind === 'custom' && e.id === id); });
   toast('Page deleted', 'success');
-  refreshPagesList();
-  refreshPagesHeader();
   autosaveContent();
+  showView('home');
 }
 
-function startAddPage() {
+function addCustomPageFromSidebar() {
   var id = String(Date.now());
   var page = { id: id, title: '', eyebrow: '', body: '', image: null, visible: true, slug: uniqueSlug('page', id) };
   state.content.pages = state.content.pages || [];
-  state.content.pages.unshift(page);
-  editingPageId = id;
-  expandedPageId = id;
-  setPreview('site', 'page.html?slug=' + encodeURIComponent(page.slug));
-  refreshPagesList();
-  refreshPagesHeader();
+  state.content.pages.push(page);
+  getNavPages(); // syncs navPages, adds this one with inMenu:true
+  renderPagesNav();
+  showView('page:' + id);
+  autosaveContent();
 }
+
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 function wireView(view) { /* fields wire via inline oninput/onclick */ }
@@ -1461,6 +1503,7 @@ window.onbeforeunload = function(e) {
 
 // GitHub is the source of truth — load everything from it before the first
 // render, rather than starting from local storage.
+renderPagesNav();
 loadAllFromGitHub(true);
 </script>
 </body>
