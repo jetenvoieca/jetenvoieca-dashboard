@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jetenvoieca</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=Inter:wght@300;400&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',sans-serif;background:#F0E8C8;color:#1a1714;min-height:100vh}
+
+.wrap{max-width:640px;margin:0 auto;padding:56px 32px 80px}
+
+.top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:80px;flex-wrap:wrap;gap:20px}
+.wordmark{
+  font-family:'Cormorant Garamond',serif;
+  font-size:11px;font-weight:300;
+  letter-spacing:.32em;text-transform:uppercase;
+  color:#1a1714;opacity:.55;text-decoration:none;
+}
+nav{display:flex;gap:22px}
+nav a{
+  font-family:'Cormorant Garamond',serif;
+  font-size:17px;font-weight:300;font-style:italic;
+  letter-spacing:.06em;color:#1a1714;text-decoration:none;
+  opacity:.4;transition:opacity .2s;
+}
+nav a:hover{opacity:1}
+
+.eyebrow{
+  font-size:9px;letter-spacing:.22em;text-transform:uppercase;
+  color:#B8561E;margin-bottom:14px;font-weight:400;display:none;
+}
+h1{
+  font-family:'Cormorant Garamond',serif;
+  font-size:44px;font-weight:300;line-height:1.1;
+  margin-bottom:28px;
+}
+.hero-image{width:100%;max-height:340px;object-fit:cover;border-radius:6px;margin-bottom:36px;display:none}
+.body-text{
+  font-size:14px;line-height:1.85;
+  color:rgba(26,23,20,0.72);
+  letter-spacing:.015em;
+  max-width:480px;
+  white-space:pre-line;
+}
+
+.footer-area{margin-top:80px;padding-top:24px;border-top:0.5px solid rgba(26,23,20,0.18)}
+.footer-area span{
+  font-size:9px;letter-spacing:.18em;text-transform:uppercase;
+  color:rgba(26,23,20,0.35);
+}
+
+.not-found{font-family:'Cormorant Garamond',serif;font-size:22px;font-style:italic;color:rgba(26,23,20,0.5)}
+
+@media(max-width:600px){
+  h1{font-size:32px}
+  .top{margin-bottom:56px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="top">
+    <a href="index.html" class="wordmark">Jetenvoieca</a>
+    <nav>
+      <a href="index.html">Home</a>
+      <a href="story.html">Story</a>
+      <a href="contact.html">Contact</a>
+    </nav>
+  </div>
+
+  <div id="page-content">
+    <p class="not-found">Loading…</p>
+  </div>
+
+  <div class="footer-area">
+    <span id="footer-location">Aude · South of France</span>
+  </div>
+
+</div>
+
+<script>
+// Which page to show comes from ?slug=xxx in the URL. Bureau's preview pane
+// reads window.PAGE_SLUG to know which draft to inject when editing this page.
+var params = new URLSearchParams(window.location.search);
+window.PAGE_SLUG = params.get('slug') || '';
+
+fetch('content.json', { cache: 'no-store' })
+  .then(function(r) { return r.ok ? r.json() : null; })
+  .then(function(data) {
+    if (!data) { renderNotFound(); return; }
+    var h = data.home || {};
+    setText('footer-location', h.location);
+
+    var pages = data.pages || [];
+    var page = pages.find(function(p) { return p.slug === window.PAGE_SLUG; });
+    if (!page || page.visible === false) { renderNotFound(); return; }
+    renderPage(page);
+  })
+  .catch(function() { renderNotFound(); });
+
+function renderPage(page) {
+  var html = '';
+  if (page.eyebrow) html += '<div class="eyebrow" style="display:block">' + escapeHtml(page.eyebrow) + '</div>';
+  html += '<h1>' + escapeHtml(page.title || 'Untitled') + '</h1>';
+  if (page.image) html += '<img class="hero-image" style="display:block" src="' + page.image + '" alt="">';
+  html += '<div class="body-text">' + escapeHtml(page.body || '') + '</div>';
+  document.getElementById('page-content').innerHTML = html;
+  document.title = (page.title || 'Jetenvoieca') + ' — Jetenvoieca';
+}
+
+function renderNotFound() {
+  document.getElementById('page-content').innerHTML = '<p class="not-found">This page isn\'t available.</p>';
+}
+
+function setText(id, value) {
+  if (!value) return;
+  var el = document.getElementById(id);
+  if (el) el.textContent = value;
+}
+
+function escapeHtml(s) {
+  return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
+</body>
+</html>
