@@ -75,7 +75,7 @@
     {
       "id": "retail",
       "kind": "retail",
-      "inMenu": false
+      "inMenu": true
     },
     {
       "id": "1783960877229",
