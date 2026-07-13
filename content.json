@@ -30,5 +30,16 @@
     "tagline": "Design · Artists · Commerce · Aude",
     "email": "craig@jetenvoieca.com",
     "location": "Narbonne, Aude, South of France"
-  }
+  },
+  "pages": [
+    {
+      "id": "1783960877229",
+      "title": "Isendyouthis",
+      "eyebrow": "",
+      "body": "",
+      "image": null,
+      "visible": true,
+      "slug": "page"
+    }
+  ]
 }
