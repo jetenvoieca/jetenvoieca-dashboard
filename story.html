@@ -74,7 +74,7 @@ h1{
 
   <div class="top">
     <a href="index.html" class="wordmark">Jetenvoieca</a>
-    <nav>
+    <nav id="site-nav">
       <a href="index.html">Home</a>
       <a href="story.html" class="active">Story</a>
       <a href="contact.html">Contact</a>
@@ -95,11 +95,13 @@ h1{
 
 </div>
 
+<script src="nav.js"></script>
 <script>
 fetch('content.json', { cache: 'no-store' })
   .then(function(r) { return r.ok ? r.json() : null; })
   .then(function(data) {
     if (!data) return;
+    renderSiteNav(data, 'story.html');
     var s = data.story || {};
     setText('story-title', s.title); setText('story-subtitle', s.subtitle);
     setText('story-c1', s.chapter1); setText('story-c2', s.chapter2); setText('story-c3', s.chapter3);
