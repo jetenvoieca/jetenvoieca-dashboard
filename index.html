@@ -15,6 +15,7 @@ body{font-family:'Inter',sans-serif;background:#F0E8C8;color:#1a1714}
 /* LEFT */
 .left{position:relative;overflow:hidden}
 .left svg{position:absolute;inset:0;width:100%;height:100%}
+.left img.hero-image{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none}
 
 /* RIGHT */
 .right{
@@ -86,6 +87,7 @@ nav a.active{font-style:normal;opacity:.85}
 <div class="page">
 
   <div class="left">
+    <img class="hero-image" id="hero-image" alt="">
     <svg viewBox="0 0 800 1000" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
 
       <!-- Ground colour -->
@@ -226,6 +228,12 @@ fetch('content.json', { cache: 'no-store' })
     if (h.email) {
       var emailEl = document.getElementById('footer-email');
       if (emailEl) { emailEl.textContent = h.email; emailEl.href = 'mailto:' + h.email; }
+    }
+    if (h.image) {
+      var heroImg = document.getElementById('hero-image');
+      var heroSvg = document.querySelector('.left svg');
+      if (heroImg) { heroImg.src = h.image; heroImg.style.display = 'block'; }
+      if (heroSvg) heroSvg.style.display = 'none';
     }
   })
   .catch(function() { /* offline or first deploy before content.json exists — static copy stands */ });
