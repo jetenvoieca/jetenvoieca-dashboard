@@ -183,6 +183,19 @@ button,input,textarea,select{font-family:'Jost',sans-serif;font-size:13px;font-w
         </div>
       </div>
 
+      <!-- FINANCIAL -->
+      <div class="acc-group">
+        <button class="acc-hd" id="acc-financial" onclick="toggleAcc('financial')">
+          Financial <span class="chev">▼</span>
+        </button>
+        <div class="acc-body" id="acc-body-financial">
+          <div class="acc-items">
+            <button class="acc-item" onclick="showView('financial-accounts')">Accounts</button>
+            <button class="acc-item" onclick="showView('financial-settings')">Financial Settings</button>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -513,6 +526,8 @@ function showView(view) {
   else if (view === 'domains-all' || view === 'domains-unassigned') pane.innerHTML = viewDomains(view);
   else if (view === 'domains-sync') pane.innerHTML = viewNcSync();
   else if (view === 'settings-site') { pane.innerHTML = viewSiteSettings(); setPreview('site'); }
+  else if (view === 'financial-accounts') pane.innerHTML = viewFinancialAccounts();
+  else if (view === 'financial-settings') pane.innerHTML = viewFinancialSettings();
   else pane.innerHTML = '<div class="edit-inner"><p style="color:var(--muted);font-size:13px;margin-top:40px;text-align:center">Coming soon</p></div>';
 
   wireView(view);
@@ -1088,6 +1103,32 @@ function onSiteSettingsFieldChange() {
   state.content.settings = {
     name: val('ss-name'), tagline: val('ss-tag'),
     email: val('ss-email'), location: val('ss-loc')
+  };
+  autosaveContent();
+}
+
+// ── FINANCIAL ────────────────────────────────────────────────────────────────
+function viewFinancialAccounts() {
+  return '<div class="edit-inner">' +
+    '<div class="sticky-hd"><div class="edit-title">Accounts</div><div class="edit-sub">Coming soon</div></div>' +
+    '<p style="color:var(--muted);font-size:13px;text-align:center;margin-top:40px">Placeholder for now</p>' +
+    '</div>';
+}
+
+function viewFinancialSettings() {
+  var c = state.content.financial || {};
+  return '<div class="edit-inner">' +
+    '<div class="sticky-hd"><div class="edit-title">Financial Settings</div><div class="edit-sub">Rates used across invoicing and accounts</div></div>' +
+    '<div class="card"><div class="card-title">Rates</div>' +
+    '<div class="field"><label>VAT Rate (%)</label><input id="fs-vat" oninput="onFinancialSettingsFieldChange()" value="' + esc(c.vatRate || '') + '" placeholder="e.g. 20"></div>' +
+    '<div class="field"><label>Urssaf Rate (%)</label><input id="fs-urssaf" oninput="onFinancialSettingsFieldChange()" value="' + esc(c.urssafRate || '') + '" placeholder="e.g. 22"></div>' +
+    '</div>' +
+    '</div>';
+}
+
+function onFinancialSettingsFieldChange() {
+  state.content.financial = {
+    vatRate: val('fs-vat'), urssafRate: val('fs-urssaf')
   };
   autosaveContent();
 }
