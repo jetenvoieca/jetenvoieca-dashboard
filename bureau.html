@@ -449,6 +449,12 @@ function viewHome() {
   return '<div class="edit-inner">' +
     '<div class="sticky-hd"><div class="edit-title">Home Page</div><div class="edit-sub">Public-facing landing page content</div></div>' +
 
+    '<div class="card"><div class="card-title">Homepage Image</div>' +
+    '<p style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">Fills the panel to the left of the text on the homepage, edge to edge. Leave blank to keep the current artwork.</p>' +
+    (c.image ? '<img src="' + c.image + '" style="max-height:160px;border-radius:4px;margin-bottom:10px;display:block">' : '') +
+    '<input type="file" id="h-image" accept="image/*" style="padding:6px 0">' +
+    '</div>' +
+
     '<div class="card"><div class="card-title">Three Message Blocks</div>' +
 
     '<div class="field"><label>Block 1 — Eyebrow</label><input id="h-e1" value="' + esc(c.eyebrow1||'Artists') + '"></div>' +
@@ -474,12 +480,15 @@ function viewHome() {
     '</div>';
 }
 
-function saveHome() {
+async function saveHome() {
+  var newImage = await readAndResizeImage('h-image', 1400, 1800, 0.85);
+  var existing = state.content.home || {};
   state.content.home = {
     eyebrow1: val('h-e1'), title1: val('h-t1'), body1: val('h-b1'),
     eyebrow2: val('h-e2'), title2: val('h-t2'), body2: val('h-b2'),
     eyebrow3: val('h-e3'), title3: val('h-t3'), body3: val('h-b3'),
-    location: val('h-location'), email: val('h-email')
+    location: val('h-location'), email: val('h-email'),
+    image: newImage || existing.image || null
   };
   saveContent(); markUnsaved();
   toast('Home page saved', 'success');
@@ -733,7 +742,10 @@ function cancelEditSite() {
 // the main cause of blur) and same higher-quality target.
 var IMAGE_MAX_W = 900, IMAGE_MAX_H = 600, IMAGE_QUALITY = 0.85;
 
-function readAndResizeImage(fileInputId) {
+function readAndResizeImage(fileInputId, maxW, maxH, quality) {
+  maxW = maxW || IMAGE_MAX_W;
+  maxH = maxH || IMAGE_MAX_H;
+  quality = quality || IMAGE_QUALITY;
   return new Promise(function(resolve) {
     var input = document.getElementById(fileInputId);
     var file = input && input.files && input.files[0];
@@ -742,12 +754,12 @@ function readAndResizeImage(fileInputId) {
     reader.onload = function(e) {
       var img = new Image();
       img.onload = function() {
-        var ratio = Math.min(IMAGE_MAX_W / img.width, IMAGE_MAX_H / img.height, 1); // never upscale
+        var ratio = Math.min(maxW / img.width, maxH / img.height, 1); // never upscale
         var canvas = document.createElement('canvas');
         canvas.width = Math.round(img.width * ratio);
         canvas.height = Math.round(img.height * ratio);
         canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL('image/jpeg', IMAGE_QUALITY));
+        resolve(canvas.toDataURL('image/jpeg', quality));
       };
       img.onerror = function() { resolve(null); };
       img.src = e.target.result;
