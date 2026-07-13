@@ -203,7 +203,12 @@ function loadContent() {
 }
 
 function saveContent() {
-  try { localStorage.setItem('jv_content', JSON.stringify(state.content)); } catch(e) {}
+  try {
+    localStorage.setItem('jv_content', JSON.stringify(state.content));
+    return true;
+  } catch (e) {
+    return false;
+  }
 }
 
 function markUnsaved() {
@@ -542,6 +547,7 @@ function viewHome() {
 async function saveHome() {
   var newImage = await readAndResizeImage('h-image', 1400, 1800, 0.85);
   var existing = state.content.home || {};
+  var previous = state.content.home;
   state.content.home = {
     eyebrow1: val('h-e1'), title1: val('h-t1'), body1: val('h-b1'),
     eyebrow2: val('h-e2'), title2: val('h-t2'), body2: val('h-b2'),
@@ -549,7 +555,12 @@ async function saveHome() {
     location: val('h-location'), email: val('h-email'),
     image: newImage || existing.image || null
   };
-  saveContent(); markUnsaved();
+  if (!saveContent()) {
+    state.content.home = previous; // roll back — don't leave Bureau thinking it saved when it didn't
+    toast('Could not save — local storage is full. Try a smaller image.', 'error');
+    return;
+  }
+  markUnsaved();
   applyDraftToFrame();
   toast('Home page saved', 'success');
 }
@@ -576,11 +587,17 @@ function viewStory() {
 }
 
 function saveStory() {
+  var previous = state.content.story;
   state.content.story = {
     title: val('s-title'), subtitle: val('s-sub'),
     chapter1: val('s-c1'), chapter2: val('s-c2'), chapter3: val('s-c3')
   };
-  saveContent(); markUnsaved();
+  if (!saveContent()) {
+    state.content.story = previous;
+    toast('Could not save — local storage is full', 'error');
+    return;
+  }
+  markUnsaved();
   toast('Story page saved', 'success');
 }
 
@@ -601,10 +618,16 @@ function viewContact() {
 }
 
 function saveContact() {
+  var previous = state.content.contact;
   state.content.contact = {
     email: val('c-email'), location: val('c-location'), intro: val('c-intro')
   };
-  saveContent(); markUnsaved();
+  if (!saveContent()) {
+    state.content.contact = previous;
+    toast('Could not save — local storage is full', 'error');
+    return;
+  }
+  markUnsaved();
   toast('Contact page saved', 'success');
 }
 
@@ -1097,11 +1120,17 @@ function viewSiteSettings() {
 }
 
 function saveSiteSettings() {
+  var previous = state.content.settings;
   state.content.settings = {
     name: val('ss-name'), tagline: val('ss-tag'),
     email: val('ss-email'), location: val('ss-loc')
   };
-  saveContent(); markUnsaved();
+  if (!saveContent()) {
+    state.content.settings = previous;
+    toast('Could not save — local storage is full', 'error');
+    return;
+  }
+  markUnsaved();
   toast('Settings saved', 'success');
 }
 
