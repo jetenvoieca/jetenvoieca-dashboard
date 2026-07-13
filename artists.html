@@ -72,7 +72,7 @@ h1{
 
   <div class="top">
     <a href="index.html" class="wordmark">Jetenvoieca</a>
-    <nav>
+    <nav id="site-nav">
       <a href="index.html">Home</a>
       <a href="story.html">Story</a>
       <a href="contact.html">Contact</a>
@@ -91,11 +91,13 @@ h1{
 
 </div>
 
+<script src="nav.js"></script>
 <script>
 fetch('content.json', { cache: 'no-store' })
   .then(function(r) { return r.ok ? r.json() : null; })
   .then(function(data) {
     if (!data) return;
+    renderSiteNav(data, 'artists.html');
     var a = data.artists || {};
     setText('artists-eyebrow', a.eyebrow); setText('artists-title', a.title); setText('artists-body', a.body);
     setText('artists-cta', a.cta);
