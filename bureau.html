@@ -193,63 +193,115 @@ button,input,textarea,select{font-family:'Jost',sans-serif;font-size:13px;font-w
 <script>
 // ── STATE ────────────────────────────────────────────────────────────────────
 var state = {
-  hasUnsaved: false,
   currentView: null,
-  content: loadContent()
+  content: {},   // content.json — home/story/contact/settings
+  sites: [],     // sites.json
+  domains: null, // domains.json
+  loaded: false
 };
 
-function loadContent() {
-  try { return JSON.parse(localStorage.getItem('jv_content') || '{}'); } catch(e) { return {}; }
-}
-
-function saveContent() {
+// GitHub is the only source of truth — no local storage. On load, pull the
+// three published files into memory. Everything Bureau reads and displays
+// comes from these in-memory copies, kept in sync by autosave below.
+async function loadAllFromGitHub(silent) {
+  var contentOk = false;
   try {
-    localStorage.setItem('jv_content', JSON.stringify(state.content));
-    return true;
-  } catch (e) {
-    return false;
+    var res = await fetch('content.json', { cache: 'no-store' });
+    if (res.ok) { state.content = await res.json(); contentOk = true; }
+  } catch (err) { /* first publish hasn't happened yet */ }
+
+  try {
+    var sitesRes = await fetch('sites.json', { cache: 'no-store' });
+    state.sites = sitesRes.ok ? await sitesRes.json() : [];
+  } catch (err) { state.sites = []; }
+
+  try {
+    var domainsRes = await fetch('domains.json', { cache: 'no-store' });
+    state.domains = domainsRes.ok ? await domainsRes.json() : null;
+  } catch (err) { state.domains = null; }
+
+  state.loaded = true;
+  if (state.currentView) showView(state.currentView);
+  if (!silent) {
+    if (contentOk) toast('Loaded from GitHub ✓', 'success');
+    else toast('Nothing published yet — start editing to create it', 'error');
   }
 }
 
-function markUnsaved() {
-  state.hasUnsaved = true;
-  var btn = document.getElementById('btn-publish');
-  var status = document.getElementById('publish-status');
-  btn.classList.add('pending');
-  status.textContent = 'Unsaved changes';
-  status.className = 'publish-status pending';
+// ── AUTOSAVE ─────────────────────────────────────────────────────────────────
+// Every field writes to GitHub after you pause typing — no Save button.
+// Debounced per-target so rapid edits collapse into one write, not one per
+// keystroke. This uses the exact same publishFile() call Publish itself
+// uses — deploys are still only triggered however Publish already triggers
+// them, autosave just keeps GitHub itself current at all times.
+function debounce(fn, delay) {
+  var timer = null;
+  return function() {
+    var args = arguments;
+    clearTimeout(timer);
+    state.pendingAutosave = true;
+    setAutosaveStatus('pending');
+    timer = setTimeout(function() { fn.apply(null, args); }, delay);
+  };
 }
 
-function markSaved() {
-  state.hasUnsaved = false;
-  var btn = document.getElementById('btn-publish');
+function setAutosaveStatus(state) {
   var status = document.getElementById('publish-status');
-  btn.classList.remove('pending');
-  status.textContent = 'All changes saved';
-  status.className = 'publish-status';
+  if (!status) return;
+  if (state === 'pending') { status.textContent = 'Saving…'; status.className = 'publish-status pending'; }
+  else if (state === 'saved') { status.textContent = 'Saved to GitHub ✓'; status.className = 'publish-status'; }
+  else if (state === 'error') { status.textContent = 'Autosave failed'; status.className = 'publish-status pending'; }
+}
+
+var autosaveContent = debounce(async function() {
+  try {
+    await publishFile('content', JSON.stringify(state.content, null, 2), 'Autosave content.json via Bureau');
+    state.pendingAutosave = false;
+    setAutosaveStatus('saved');
+  } catch (err) {
+    setAutosaveStatus('error');
+    toast('Autosave failed: ' + err.message, 'error');
+  }
+}, 1500);
+
+var autosaveSites = debounce(async function() {
+  try {
+    await publishFile('sites', JSON.stringify(state.sites, null, 2), 'Autosave sites.json via Bureau');
+    state.pendingAutosave = false;
+    setAutosaveStatus('saved');
+  } catch (err) {
+    setAutosaveStatus('error');
+    toast('Autosave failed: ' + err.message, 'error');
+  }
+}, 1500);
+
+// Domains change via discrete actions (import/sync), not typing, so this
+// writes immediately rather than debouncing.
+async function autosaveDomainsNow() {
+  setAutosaveStatus('pending');
+  try {
+    await publishFile('domains', JSON.stringify(state.domains, null, 2), 'Update domains.json via Bureau');
+    setAutosaveStatus('saved');
+  } catch (err) {
+    setAutosaveStatus('error');
+    toast('Autosave failed: ' + err.message, 'error');
+  }
 }
 
 async function publish() {
-  saveContent();
-
   var btn = document.getElementById('btn-publish');
   var status = document.getElementById('publish-status');
   btn.disabled = true;
   status.textContent = 'Publishing…';
   status.className = 'publish-status pending';
 
-  var sites = [];
-  try { sites = JSON.parse(localStorage.getItem('jv_sites') || '[]'); } catch (e) {}
-  var ncDomains = null;
-  try { ncDomains = JSON.parse(localStorage.getItem('nc_domains') || 'null'); } catch (e) {}
-
   try {
     await publishFile('content', JSON.stringify(state.content, null, 2), 'Update content.json via Bureau');
-    await publishFile('sites', JSON.stringify(sites, null, 2), 'Update sites.json via Bureau');
-    if (ncDomains) {
-      await publishFile('domains', JSON.stringify(ncDomains, null, 2), 'Update domains.json via Bureau');
+    await publishFile('sites', JSON.stringify(state.sites, null, 2), 'Update sites.json via Bureau');
+    if (state.domains) {
+      await publishFile('domains', JSON.stringify(state.domains, null, 2), 'Update domains.json via Bureau');
     }
-    markSaved();
+    setAutosaveStatus('saved');
     toast('Published to GitHub ✓', 'success');
     setTimeout(refreshPreview, 1500); // give Netlify a moment to rebuild
   } catch (err) {
@@ -269,45 +321,6 @@ async function publishFile(target, content, message) {
   var json = await res.json();
   if (!res.ok) throw new Error(json.error || ('Publish failed (' + res.status + ')'));
   return json;
-}
-
-// ── DEPLOY (via Netlify function — GitHub token lives server-side, never here) ─
-// Pulls content.json, sites.json, and domains.json straight off this site
-// (public, no auth needed) so Bureau — and the dashboard, since they share
-// the same browser storage — always reflect what's actually published,
-// rather than whatever was last saved in this one browser.
-async function loadFromGitHub(silent) {
-  var contentOk = false;
-  try {
-    var res = await fetch('content.json', { cache: 'no-store' });
-    if (res.ok) {
-      state.content = await res.json();
-      saveContent();
-      contentOk = true;
-    }
-  } catch (err) { /* offline or first deploy — fall through */ }
-
-  try {
-    var sitesRes = await fetch('sites.json', { cache: 'no-store' });
-    if (sitesRes.ok) {
-      var sitesData = await sitesRes.json();
-      localStorage.setItem('jv_sites', JSON.stringify(sitesData));
-    }
-  } catch (err) { /* first publish hasn't happened yet — keep local copy */ }
-
-  try {
-    var domainsRes = await fetch('domains.json', { cache: 'no-store' });
-    if (domainsRes.ok) {
-      var domainsData = await domainsRes.json();
-      localStorage.setItem('nc_domains', JSON.stringify(domainsData));
-    }
-  } catch (err) { /* no domains published yet — keep local copy */ }
-
-  if (state.currentView) showView(state.currentView);
-  if (!silent) {
-    if (contentOk) toast('Loaded latest published content ✓', 'success');
-    else toast('Nothing published yet — hit Publish to create it', 'error');
-  }
 }
 
 function toast(msg, type) {
@@ -515,54 +528,57 @@ function viewHome() {
     '<p style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">Fills the panel to the left of the text on the homepage, edge to edge. Leave blank to keep the current artwork.</p>' +
     '<div style="display:flex;align-items:center;gap:12px">' +
     '<img id="h-image-preview" src="' + (c.image || '') + '" style="width:64px;height:64px;object-fit:cover;border-radius:4px;background:var(--border);display:' + (c.image ? 'block' : 'none') + ';flex-shrink:0">' +
-    '<input type="file" id="h-image" accept="image/*" onchange="previewImageFile(\'h-image\',\'h-image-preview\')" style="padding:6px 0">' +
+    '<input type="file" id="h-image" accept="image/*" onchange="onHomeImageChange()" style="padding:6px 0">' +
     '</div>' +
     '</div>' +
 
     '<div class="card"><div class="card-title">Three Message Blocks</div>' +
 
-    '<div class="field"><label>Block 1 — Eyebrow</label><input id="h-e1" value="' + esc(c.eyebrow1||'Artists') + '"></div>' +
-    '<div class="field"><label>Block 1 — Title</label><input id="h-t1" value="' + esc(c.title1||'Websites for Artists') + '"></div>' +
-    '<div class="field"><label>Block 1 — Body</label><textarea id="h-b1">' + esc(c.body1||'Beautiful, minimal portfolio sites. Built to show the work, not obscure it. Every site different. Every artist served.') + '</textarea></div>' +
+    '<div class="field"><label>Block 1 — Eyebrow</label><input id="h-e1" oninput="onHomeFieldChange()" value="' + esc(c.eyebrow1||'Artists') + '"></div>' +
+    '<div class="field"><label>Block 1 — Title</label><input id="h-t1" oninput="onHomeFieldChange()" value="' + esc(c.title1||'Websites for Artists') + '"></div>' +
+    '<div class="field"><label>Block 1 — Body</label><textarea id="h-b1" oninput="onHomeFieldChange()">' + esc(c.body1||'Beautiful, minimal portfolio sites. Built to show the work, not obscure it. Every site different. Every artist served.') + '</textarea></div>' +
 
-    '<div class="field"><label>Block 2 — Eyebrow</label><input id="h-e2" value="' + esc(c.eyebrow2||'Commerce') + '"></div>' +
-    '<div class="field"><label>Block 2 — Title</label><input id="h-t2" value="' + esc(c.title2||'Serendipity for Online Retail') + '"></div>' +
-    '<div class="field"><label>Block 2 — Body</label><textarea id="h-b2">' + esc(c.body2||'Discovery without search. A white-label layer that lets customers browse and find what they didn\'t know they wanted.') + '</textarea></div>' +
+    '<div class="field"><label>Block 2 — Eyebrow</label><input id="h-e2" oninput="onHomeFieldChange()" value="' + esc(c.eyebrow2||'Commerce') + '"></div>' +
+    '<div class="field"><label>Block 2 — Title</label><input id="h-t2" oninput="onHomeFieldChange()" value="' + esc(c.title2||'Serendipity for Online Retail') + '"></div>' +
+    '<div class="field"><label>Block 2 — Body</label><textarea id="h-b2" oninput="onHomeFieldChange()">' + esc(c.body2||'Discovery without search. A white-label layer that lets customers browse and find what they didn\'t know they wanted.') + '</textarea></div>' +
 
-    '<div class="field"><label>Block 3 — Eyebrow</label><input id="h-e3" value="' + esc(c.eyebrow3||'Studio') + '"></div>' +
-    '<div class="field"><label>Block 3 — Title</label><input id="h-t3" value="' + esc(c.title3||'Design that works differently') + '"></div>' +
-    '<div class="field"><label>Block 3 — Body</label><textarea id="h-b3">' + esc(c.body3||'Systems built from the user outward. Unconventional, accessible, effective. Users have loved them. IT departments less so.') + '</textarea></div>' +
+    '<div class="field"><label>Block 3 — Eyebrow</label><input id="h-e3" oninput="onHomeFieldChange()" value="' + esc(c.eyebrow3||'Studio') + '"></div>' +
+    '<div class="field"><label>Block 3 — Title</label><input id="h-t3" oninput="onHomeFieldChange()" value="' + esc(c.title3||'Design that works differently') + '"></div>' +
+    '<div class="field"><label>Block 3 — Body</label><textarea id="h-b3" oninput="onHomeFieldChange()">' + esc(c.body3||'Systems built from the user outward. Unconventional, accessible, effective. Users have loved them. IT departments less so.') + '</textarea></div>' +
     '</div>' +
 
     '<div class="card"><div class="card-title">Footer</div>' +
     '<div class="field-row">' +
-    '<div class="field"><label>Location</label><input id="h-location" value="' + esc(c.location||'Aude · South of France') + '"></div>' +
-    '<div class="field"><label>Email</label><input id="h-email" value="' + esc(c.email||'craig@jetenvoieca.com') + '"></div>' +
+    '<div class="field"><label>Location</label><input id="h-location" oninput="onHomeFieldChange()" value="' + esc(c.location||'Aude · South of France') + '"></div>' +
+    '<div class="field"><label>Email</label><input id="h-email" oninput="onHomeFieldChange()" value="' + esc(c.email||'craig@jetenvoieca.com') + '"></div>' +
     '</div></div>' +
-
-    '<div class="form-actions"><button class="btn-save" onclick="saveHome()">Save</button></div>' +
     '</div>';
 }
 
-async function saveHome() {
-  var newImage = await readAndResizeImage('h-image', 1400, 1800, 0.85);
-  var existing = state.content.home || {};
-  var previous = state.content.home;
-  state.content.home = {
+function onHomeFieldChange() {
+  state.content.home = Object.assign({}, state.content.home, {
     eyebrow1: val('h-e1'), title1: val('h-t1'), body1: val('h-b1'),
     eyebrow2: val('h-e2'), title2: val('h-t2'), body2: val('h-b2'),
     eyebrow3: val('h-e3'), title3: val('h-t3'), body3: val('h-b3'),
-    location: val('h-location'), email: val('h-email'),
-    image: newImage || existing.image || null
-  };
-  if (!saveContent()) {
-    state.content.home = previous; // roll back — don't leave Bureau thinking it saved when it didn't
-    toast('Could not save — local storage is full. Try a smaller image.', 'error');
+    location: val('h-location'), email: val('h-email')
+  });
+  applyDraftToFrame();
+  autosaveContent();
+}
+
+async function onHomeImageChange() {
+  previewImageFile('h-image', 'h-image-preview');
+  var newImage;
+  try {
+    newImage = await readAndResizeImage('h-image', 1400, 1800, 0.85);
+  } catch (err) {
+    toast(err.message, 'error');
     return;
   }
-  markUnsaved();
+  if (!newImage) return;
+  state.content.home = Object.assign({}, state.content.home, { image: newImage });
   applyDraftToFrame();
-  toast('Home page saved', 'success');
+  autosaveContent();
 }
 
 // ── STORY PAGE EDITOR ─────────────────────────────────────────────────────────
@@ -572,33 +588,24 @@ function viewStory() {
     '<div class="sticky-hd"><div class="edit-title">Story Page</div><div class="edit-sub">Your story and background</div></div>' +
 
     '<div class="card"><div class="card-title">Headline</div>' +
-    '<div class="field"><label>Page Title</label><input id="s-title" value="' + esc(c.title||'Design that happens for a reason') + '"></div>' +
-    '<div class="field"><label>Subtitle</label><input id="s-sub" value="' + esc(c.subtitle||'South of France · Since 2020') + '"></div>' +
+    '<div class="field"><label>Page Title</label><input id="s-title" oninput="onStoryFieldChange()" value="' + esc(c.title||'Design that happens for a reason') + '"></div>' +
+    '<div class="field"><label>Subtitle</label><input id="s-sub" oninput="onStoryFieldChange()" value="' + esc(c.subtitle||'South of France · Since 2020') + '"></div>' +
     '</div>' +
 
     '<div class="card"><div class="card-title">The Story</div>' +
-    '<div class="field"><label>Chapter 1 — The Accident</label><textarea id="s-c1" rows="6">' + esc(c.chapter1||'We were caught on holiday in the South of France by the lockdown — the confinement. During which the house next to the one we were renting came up for sale. So we bought it and stayed. We believe things sort of happen for a reason.') + '</textarea></div>' +
-    '<div class="field"><label>Chapter 2 — The Work</label><textarea id="s-c2" rows="6">' + esc(c.chapter2||'My passion for design, practicability and useability have driven me all my life. I designed systems for lawyers, banks, car leasing, government departments — successfully in the 1990s. The IT departments hated them because they didn\'t conform. Users loved them. In one government department they had to rotate users on to our system to avoid a strike.') + '</textarea></div>' +
-    '<div class="field"><label>Chapter 3 — The Philosophy</label><textarea id="s-c3" rows="5">' + esc(c.chapter3||'Different and better are key to me. I try to keep all functionality accessible — deep menu structures I hate. Minimalist, elegant, effective. Content left, actions right.') + '</textarea></div>' +
+    '<div class="field"><label>Chapter 1 — The Accident</label><textarea id="s-c1" oninput="onStoryFieldChange()" rows="6">' + esc(c.chapter1||'We were caught on holiday in the South of France by the lockdown — the confinement. During which the house next to the one we were renting came up for sale. So we bought it and stayed. We believe things sort of happen for a reason.') + '</textarea></div>' +
+    '<div class="field"><label>Chapter 2 — The Work</label><textarea id="s-c2" oninput="onStoryFieldChange()" rows="6">' + esc(c.chapter2||'My passion for design, practicability and useability have driven me all my life. I designed systems for lawyers, banks, car leasing, government departments — successfully in the 1990s. The IT departments hated them because they didn\'t conform. Users loved them. In one government department they had to rotate users on to our system to avoid a strike.') + '</textarea></div>' +
+    '<div class="field"><label>Chapter 3 — The Philosophy</label><textarea id="s-c3" oninput="onStoryFieldChange()" rows="5">' + esc(c.chapter3||'Different and better are key to me. I try to keep all functionality accessible — deep menu structures I hate. Minimalist, elegant, effective. Content left, actions right.') + '</textarea></div>' +
     '</div>' +
-
-    '<div class="form-actions"><button class="btn-save" onclick="saveStory()">Save</button></div>' +
     '</div>';
 }
 
-function saveStory() {
-  var previous = state.content.story;
+function onStoryFieldChange() {
   state.content.story = {
     title: val('s-title'), subtitle: val('s-sub'),
     chapter1: val('s-c1'), chapter2: val('s-c2'), chapter3: val('s-c3')
   };
-  if (!saveContent()) {
-    state.content.story = previous;
-    toast('Could not save — local storage is full', 'error');
-    return;
-  }
-  markUnsaved();
-  toast('Story page saved', 'success');
+  autosaveContent();
 }
 
 // ── CONTACT PAGE EDITOR ───────────────────────────────────────────────────────
@@ -608,38 +615,27 @@ function viewContact() {
     '<div class="sticky-hd"><div class="edit-title">Contact Page</div><div class="edit-sub">Contact details and message</div></div>' +
 
     '<div class="card"><div class="card-title">Contact Details</div>' +
-    '<div class="field"><label>Email</label><input id="c-email" value="' + esc(c.email||'craig@jetenvoieca.com') + '"></div>' +
-    '<div class="field"><label>Location</label><input id="c-location" value="' + esc(c.location||'Near Narbonne, Aude, South of France') + '"></div>' +
-    '<div class="field"><label>Intro Message</label><textarea id="c-intro" rows="4">' + esc(c.intro||'Whether you\'re an artist looking for a website, a retailer interested in serendipitous discovery, or simply want to talk design — get in touch.') + '</textarea></div>' +
+    '<div class="field"><label>Email</label><input id="c-email" oninput="onContactFieldChange()" value="' + esc(c.email||'craig@jetenvoieca.com') + '"></div>' +
+    '<div class="field"><label>Location</label><input id="c-location" oninput="onContactFieldChange()" value="' + esc(c.location||'Near Narbonne, Aude, South of France') + '"></div>' +
+    '<div class="field"><label>Intro Message</label><textarea id="c-intro" oninput="onContactFieldChange()" rows="4">' + esc(c.intro||'Whether you\'re an artist looking for a website, a retailer interested in serendipitous discovery, or simply want to talk design — get in touch.') + '</textarea></div>' +
     '</div>' +
-
-    '<div class="form-actions"><button class="btn-save" onclick="saveContact()">Save</button></div>' +
     '</div>';
 }
 
-function saveContact() {
-  var previous = state.content.contact;
+function onContactFieldChange() {
   state.content.contact = {
     email: val('c-email'), location: val('c-location'), intro: val('c-intro')
   };
-  if (!saveContent()) {
-    state.content.contact = previous;
-    toast('Could not save — local storage is full', 'error');
-    return;
-  }
-  markUnsaved();
-  toast('Contact page saved', 'success');
+  autosaveContent();
 }
 
 // ── SITES DASHBOARD ───────────────────────────────────────────────────────────
 var sitesSearchTerm = '';
 var expandedSiteId = null;  // which site's detail panel is open
 var editingSiteId = null;   // which site is currently in edit mode
-var addingSite = false;     // whether the "new site" form is showing
 
 function viewSites() {
-  var sites = [];
-  try { sites = JSON.parse(localStorage.getItem('jv_sites') || '[]'); } catch(e) {}
+  var sites = state.sites;
 
   return '<div class="edit-inner">' +
     '<div class="sticky-hd" style="display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap">' +
@@ -664,22 +660,18 @@ function filterSitesData(sites, term) {
 }
 
 function renderSitesRows(sites) {
-  var html = '';
-  if (addingSite) html += renderAddSiteForm();
-
   if (sites.length === 0) {
-    if (!addingSite) html += '<p style="color:var(--muted);font-size:13px;text-align:center;margin-top:40px">No matching sites</p>';
-    return html;
+    return '<p style="color:var(--muted);font-size:13px;text-align:center;margin-top:40px">No matching sites</p>';
   }
 
-  html += sites.map(function(s) {
+  return sites.map(function(s) {
     var open = expandedSiteId === s.id;
     var row = '<div onclick="selectSite(\'' + s.id + '\')" style="display:flex;align-items:center;padding:10px 0;gap:10px;cursor:pointer;' +
       (open
         ? 'background:var(--ivory);margin:0 -8px;padding-left:8px;padding-right:8px;border-radius:4px 4px 0 0'
         : 'border-bottom:.5px solid var(--border)') + '">' +
       '<div style="flex:1;min-width:0">' +
-      '<div style="font-family:\'Cormorant Garamond\',serif;font-size:15px;font-style:italic">' + esc(s.name) + '</div>' +
+      '<div style="font-family:\'Cormorant Garamond\',serif;font-size:15px;font-style:italic">' + (esc(s.name) || '<span style="color:var(--muted);font-style:normal">Untitled site</span>') + '</div>' +
       '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + esc(s.url||'') + '</div></div>' +
       (s.sub_amount ? '<span style="font-size:11px;color:var(--gold);flex-shrink:0">£' + esc(s.sub_amount) + '/mo</span>' : '') +
       (s.verified ? '<span style="width:18px;height:18px;border-radius:50%;background:#2e7d32;color:white;font-size:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0">✓</span>' : '') +
@@ -689,13 +681,10 @@ function renderSitesRows(sites) {
     else if (open) panel = renderSiteDetail(s);
     return row + panel;
   }).join('');
-
-  return html;
 }
 
 // Read-only detail panel, shown alongside the image preview when a row is
-// clicked. Same horizontal edges as the row above it, so it reads as one
-// continuous panel. Edit is the further step into the actual edit form.
+// clicked. Edit is the further step into the actual edit form.
 function renderSiteDetail(s) {
   return '<div onclick="event.stopPropagation()" style="margin:0 -8px;padding:10px 8px 12px;background:var(--ivory);border-radius:0 0 4px 4px;border-bottom:.5px solid var(--border)">' +
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:12px;margin-bottom:10px">' +
@@ -711,57 +700,35 @@ function renderSiteDetail(s) {
     '</div></div>';
 }
 
-// Inline edit form shown after clicking Edit on a site row's detail panel
+// Every field here autosaves on change — no Save button. Delete removes the
+// record outright; Done just closes the panel (and quietly discards the
+// record if it was a just-created, still-blank "Add Site" that was abandoned).
 function renderSiteEditForm(s) {
   var id = s.id;
-  return '<div style="padding:16px 12px 18px;background:var(--ivory);border-radius:0 0 6px 6px;margin-bottom:2px">' +
-    '<div class="field"><label>Name</label><input id="se-name-' + id + '" value="' + esc(s.name) + '"></div>' +
-    '<div class="field"><label>Email</label><input id="se-email-' + id + '" value="' + esc(s.email || '') + '"></div>' +
-    '<div class="field"><label>URL</label><input id="se-url-' + id + '" value="' + esc(s.url) + '"></div>' +
+  return '<div onclick="event.stopPropagation()" style="padding:16px 12px 18px;background:var(--ivory);border-radius:0 0 6px 6px;margin-bottom:2px">' +
+    '<div class="field"><label>Name</label><input id="se-name-' + id + '" oninput="onSiteFieldChange(\'' + id + '\')" value="' + esc(s.name) + '"></div>' +
+    '<div class="field"><label>Email</label><input id="se-email-' + id + '" oninput="onSiteFieldChange(\'' + id + '\')" value="' + esc(s.email || '') + '"></div>' +
+    '<div class="field"><label>URL</label><input id="se-url-' + id + '" oninput="onSiteFieldChange(\'' + id + '\')" value="' + esc(s.url) + '"></div>' +
     '<div class="field-row">' +
-    '<div class="field"><label>Payment Method</label><select id="se-method-' + id + '">' +
+    '<div class="field"><label>Payment Method</label><select id="se-method-' + id + '" onchange="onSiteFieldChange(\'' + id + '\')">' +
     '<option value=""' + (!s.sub_method ? ' selected' : '') + '>Select…</option>' +
     '<option' + (s.sub_method === 'Stripe' ? ' selected' : '') + '>Stripe</option>' +
     '<option' + (s.sub_method === 'PayPal' ? ' selected' : '') + '>PayPal</option>' +
     '<option' + (s.sub_method === 'Bank Transfer' ? ' selected' : '') + '>Bank Transfer</option>' +
     '</select></div>' +
-    '<div class="field"><label>Monthly (£)</label><input id="se-amount-' + id + '" value="' + esc(s.sub_amount || '') + '"></div>' +
+    '<div class="field"><label>Monthly (£)</label><input id="se-amount-' + id + '" oninput="onSiteFieldChange(\'' + id + '\')" value="' + esc(s.sub_amount || '') + '"></div>' +
     '</div>' +
     '<div class="field"><label>Thumbnail Image</label>' +
     (s.image ? '<img src="' + s.image + '" style="max-height:90px;border-radius:4px;margin-bottom:8px;display:block">' : '') +
-    '<input type="file" id="se-image-' + id + '" accept="image/*" style="padding:6px 0">' +
-    '<div class="field-hint">Leave blank to keep the current image</div>' +
+    '<input type="file" id="se-image-' + id + '" accept="image/*" onchange="onSiteImageChange(\'' + id + '\')" style="padding:6px 0">' +
     '</div>' +
-    '<div class="field"><label>Notes</label><textarea id="se-notes-' + id + '" rows="3">' + esc(s.notes || '') + '</textarea></div>' +
+    '<div class="field"><label>Notes</label><textarea id="se-notes-' + id + '" oninput="onSiteFieldChange(\'' + id + '\')" rows="3">' + esc(s.notes || '') + '</textarea></div>' +
     '<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin-bottom:16px;cursor:pointer">' +
-    '<input type="checkbox" id="se-verified-' + id + '" style="width:auto"' + (s.verified ? ' checked' : '') + '> Verified' +
+    '<input type="checkbox" id="se-verified-' + id + '" onchange="onSiteFieldChange(\'' + id + '\')" style="width:auto"' + (s.verified ? ' checked' : '') + '> Verified' +
     '</label>' +
     '<div class="form-actions">' +
-    '<button class="btn-cancel" onclick="cancelEditSite()">Cancel</button>' +
     '<button class="btn-cancel" onclick="deleteSiteInline(\'' + id + '\')">Delete</button>' +
-    '<button class="btn-save" onclick="saveEditSite(\'' + id + '\')">Save</button>' +
-    '</div></div>';
-}
-
-// Blank form shown when "Add Site" is clicked
-function renderAddSiteForm() {
-  return '<div style="padding:16px 12px 18px;background:var(--ivory);border-radius:6px;margin-bottom:12px">' +
-    '<div class="card-title" style="margin-bottom:10px">New Site</div>' +
-    '<div class="field"><label>Name</label><input id="sa-name" placeholder="e.g. Louise Dear"></div>' +
-    '<div class="field"><label>Email</label><input id="sa-email" placeholder="client@email.com"></div>' +
-    '<div class="field"><label>URL</label><input id="sa-url" placeholder="e.g. louisedear.com"></div>' +
-    '<div class="field-row">' +
-    '<div class="field"><label>Payment Method</label><select id="sa-method"><option value="">Select…</option><option>Stripe</option><option>PayPal</option><option>Bank Transfer</option></select></div>' +
-    '<div class="field"><label>Monthly (£)</label><input id="sa-amount" placeholder="e.g. 25"></div>' +
-    '</div>' +
-    '<div class="field"><label>Thumbnail Image (optional)</label><input type="file" id="sa-image" accept="image/*" style="padding:6px 0"></div>' +
-    '<div class="field"><label>Notes</label><textarea id="sa-notes" rows="3"></textarea></div>' +
-    '<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin-bottom:16px;cursor:pointer">' +
-    '<input type="checkbox" id="sa-verified" style="width:auto"> Verified' +
-    '</label>' +
-    '<div class="form-actions">' +
-    '<button class="btn-cancel" onclick="cancelAddSite()">Cancel</button>' +
-    '<button class="btn-save" onclick="saveNewSite()">Save Site</button>' +
+    '<button class="btn-save" onclick="closeSiteForm(\'' + id + '\')">Done</button>' +
     '</div></div>';
 }
 
@@ -772,25 +739,20 @@ function filterSitesList(term) {
 }
 
 function refreshSitesList() {
-  var sites = [];
-  try { sites = JSON.parse(localStorage.getItem('jv_sites') || '[]'); } catch (e) {}
   var container = document.getElementById('sites-list');
-  if (container) container.innerHTML = renderSitesRows(filterSitesData(sites, sitesSearchTerm));
+  if (container) container.innerHTML = renderSitesRows(filterSitesData(state.sites, sitesSearchTerm));
 }
 
 // Updates the "N client sites · £X/mo" line without a full pane re-render
 function refreshSitesHeader() {
-  var sites = [];
-  try { sites = JSON.parse(localStorage.getItem('jv_sites') || '[]'); } catch (e) {}
   var subEl = document.querySelector('#edit-pane .edit-sub');
-  if (subEl) subEl.textContent = sites.length + ' client sites · £' + mrr(sites).toFixed(0) + '/mo';
+  if (subEl) subEl.textContent = state.sites.length + ' client sites · £' + mrr(state.sites).toFixed(0) + '/mo';
 }
 
 // Clicking a site row opens both the image preview and the read-only detail
 // panel beneath it. Clicking the same row again collapses both. Edit (inside
 // the detail panel) is the further step into the actual edit form.
 function selectSite(id) {
-  addingSite = false;
   if (expandedSiteId === id) {
     expandedSiteId = null;
     editingSiteId = null;
@@ -798,9 +760,7 @@ function selectSite(id) {
   } else {
     expandedSiteId = id;
     editingSiteId = null;
-    var sites = [];
-    try { sites = JSON.parse(localStorage.getItem('jv_sites') || '[]'); } catch (e) {}
-    var site = sites.find(function(s) { return s.id === id; });
+    var site = state.sites.find(function(s) { return s.id === id; });
     if (site) showSiteImage(site);
   }
   refreshSitesList();
@@ -809,16 +769,89 @@ function selectSite(id) {
 function startEditSite(id) {
   editingSiteId = id;
   expandedSiteId = id;
-  var sites = [];
-  try { sites = JSON.parse(localStorage.getItem('jv_sites') || '[]'); } catch (e) {}
-  var site = sites.find(function(s) { return s.id === id; });
+  var site = state.sites.find(function(s) { return s.id === id; });
   if (site) showSiteImage(site);
   refreshSitesList();
 }
 
-function cancelEditSite() {
+// Closes the edit panel. If it was a just-created "Add Site" record that's
+// still completely blank, quietly removes it rather than leaving a ghost
+// entry in sites.json.
+function closeSiteForm(id) {
+  var site = state.sites.find(function(s) { return s.id === id; });
+  if (site && !site.name && !site.url) {
+    state.sites = state.sites.filter(function(s) { return s.id !== id; });
+    autosaveSites();
+  }
   editingSiteId = null;
+  expandedSiteId = null;
+  setPreview(previewMode);
   refreshSitesList();
+  refreshSitesHeader();
+}
+
+function onSiteFieldChange(id) {
+  var url = val('se-url-' + id).trim();
+  state.sites = state.sites.map(function(s) {
+    if (s.id !== id) return s;
+    return Object.assign({}, s, {
+      name: val('se-name-' + id).trim(),
+      email: val('se-email-' + id).trim(),
+      url: url,
+      sub_method: val('se-method-' + id),
+      sub_amount: val('se-amount-' + id).trim(),
+      notes: val('se-notes-' + id).trim(),
+      verified: document.getElementById('se-verified-' + id).checked
+    });
+  });
+  refreshSitesHeader();
+  autosaveSites();
+}
+
+async function onSiteImageChange(id) {
+  var newImage;
+  try {
+    newImage = await readAndResizeImage('se-image-' + id);
+  } catch (err) {
+    toast(err.message, 'error');
+    return;
+  }
+  if (!newImage) return;
+  state.sites = state.sites.map(function(s) {
+    return s.id === id ? Object.assign({}, s, { image: newImage }) : s;
+  });
+  var updated = state.sites.find(function(s) { return s.id === id; });
+  if (updated) showSiteImage(updated);
+  autosaveSites();
+}
+
+function deleteSiteInline(id) {
+  if (!confirm('Remove this site?')) return;
+  state.sites = state.sites.filter(function(s) { return s.id !== id; });
+  if (expandedSiteId === id) { expandedSiteId = null; setPreview(previewMode); }
+  editingSiteId = null;
+  toast('Site removed', 'success');
+  refreshSitesList();
+  refreshSitesHeader();
+  autosaveSites();
+}
+
+// Creates the record immediately (blank) and opens it straight into the edit
+// form — matches "everything entered is saved" rather than holding a draft
+// only in memory until some separate Save click.
+function startAddSite() {
+  var site = {
+    id: String(Date.now()), name: '', email: '', url: '',
+    sub_method: '', sub_amount: '', notes: '', verified: false,
+    domain_owned: false, image: null
+  };
+  state.sites.unshift(site);
+  editingSiteId = site.id;
+  expandedSiteId = site.id;
+  sitesSearchTerm = ''; // otherwise a new blank record could be hidden by an active search filter
+  setPreview(previewMode);
+  refreshSitesList();
+  refreshSitesHeader();
 }
 
 // Matches dashboard.html's resize settings — same fix (never upscale, was
@@ -829,124 +862,52 @@ function readAndResizeImage(fileInputId, maxW, maxH, quality) {
   maxW = maxW || IMAGE_MAX_W;
   maxH = maxH || IMAGE_MAX_H;
   quality = quality || IMAGE_QUALITY;
-  return new Promise(function(resolve) {
+  return new Promise(function(resolve, reject) {
     var input = document.getElementById(fileInputId);
     var file = input && input.files && input.files[0];
     if (!file) { resolve(null); return; }
+
+    var settled = false;
+    var done = function(fn, arg) { if (!settled) { settled = true; fn(arg); } };
+
+    // Safety net — some formats (HEIC straight off an iPhone/Mac is the
+    // common case) silently fail to decode in some browsers: neither
+    // img.onload nor img.onerror ever fires, which used to hang forever
+    // with no feedback at all.
+    var timeout = setTimeout(function() {
+      done(reject, new Error('That image took too long to process — try a JPG or PNG instead of HEIC'));
+    }, 8000);
+
     var reader = new FileReader();
     reader.onload = function(e) {
       var img = new Image();
       img.onload = function() {
-        var ratio = Math.min(maxW / img.width, maxH / img.height, 1); // never upscale
-        var canvas = document.createElement('canvas');
-        canvas.width = Math.round(img.width * ratio);
-        canvas.height = Math.round(img.height * ratio);
-        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL('image/jpeg', quality));
+        try {
+          var ratio = Math.min(maxW / img.width, maxH / img.height, 1); // never upscale
+          var canvas = document.createElement('canvas');
+          canvas.width = Math.round(img.width * ratio);
+          canvas.height = Math.round(img.height * ratio);
+          canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+          var dataUrl = canvas.toDataURL('image/jpeg', quality);
+          clearTimeout(timeout);
+          done(resolve, dataUrl);
+        } catch (err) {
+          clearTimeout(timeout);
+          done(reject, new Error('Could not process that image — try a JPG or PNG instead'));
+        }
       };
-      img.onerror = function() { resolve(null); };
+      img.onerror = function() {
+        clearTimeout(timeout);
+        done(reject, new Error('Could not read that image — try a JPG or PNG instead of HEIC'));
+      };
       img.src = e.target.result;
     };
-    reader.onerror = function() { resolve(null); };
+    reader.onerror = function() {
+      clearTimeout(timeout);
+      done(reject, new Error('Could not read that file'));
+    };
     reader.readAsDataURL(file);
   });
-}
-
-async function saveEditSite(id) {
-  var name = val('se-name-' + id).trim();
-  var url = val('se-url-' + id).trim();
-  if (!name || !url) { toast('Name and URL are required', 'error'); return; }
-  if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
-
-  var newImage = await readAndResizeImage('se-image-' + id);
-
-  var sites = [];
-  try { sites = JSON.parse(localStorage.getItem('jv_sites') || '[]'); } catch (e) {}
-  sites = sites.map(function(s) {
-    if (s.id !== id) return s;
-    return Object.assign({}, s, {
-      name: name,
-      email: val('se-email-' + id).trim(),
-      url: url,
-      sub_method: val('se-method-' + id),
-      sub_amount: val('se-amount-' + id).trim(),
-      notes: val('se-notes-' + id).trim(),
-      verified: document.getElementById('se-verified-' + id).checked,
-      image: newImage || s.image
-    });
-  });
-  try {
-    localStorage.setItem('jv_sites', JSON.stringify(sites));
-  } catch (err) {
-    toast('Could not save — local storage is full, try a smaller image', 'error');
-    return;
-  }
-  editingSiteId = null;
-  toast('Site updated ✓', 'success');
-  refreshSitesList();
-  refreshSitesHeader();
-  var updated = sites.find(function(s) { return s.id === id; });
-  if (updated) showSiteImage(updated);
-}
-
-function deleteSiteInline(id) {
-  if (!confirm('Remove this site?')) return;
-  var sites = [];
-  try { sites = JSON.parse(localStorage.getItem('jv_sites') || '[]'); } catch (e) {}
-  sites = sites.filter(function(s) { return s.id !== id; });
-  localStorage.setItem('jv_sites', JSON.stringify(sites));
-  if (expandedSiteId === id) { expandedSiteId = null; setPreview(previewMode); }
-  editingSiteId = null;
-  toast('Site removed', 'success');
-  refreshSitesList();
-  refreshSitesHeader();
-}
-
-function startAddSite() {
-  addingSite = true;
-  expandedSiteId = null;
-  editingSiteId = null;
-  setPreview(previewMode);
-  refreshSitesList();
-}
-
-function cancelAddSite() {
-  addingSite = false;
-  refreshSitesList();
-}
-
-async function saveNewSite() {
-  var name = val('sa-name').trim();
-  var url = val('sa-url').trim();
-  if (!name || !url) { toast('Name and URL are required', 'error'); return; }
-  if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
-
-  var image = await readAndResizeImage('sa-image');
-
-  var sites = [];
-  try { sites = JSON.parse(localStorage.getItem('jv_sites') || '[]'); } catch (e) {}
-  sites.push({
-    id: String(Date.now()),
-    name: name,
-    email: val('sa-email').trim(),
-    url: url,
-    sub_method: val('sa-method'),
-    sub_amount: val('sa-amount').trim(),
-    notes: val('sa-notes').trim(),
-    verified: document.getElementById('sa-verified').checked,
-    domain_owned: false,
-    image: image
-  });
-  try {
-    localStorage.setItem('jv_sites', JSON.stringify(sites));
-  } catch (err) {
-    toast('Could not save — local storage is full, try a smaller image', 'error');
-    return;
-  }
-  addingSite = false;
-  toast('Site added ✓', 'success');
-  refreshSitesList();
-  refreshSitesHeader();
 }
 
 function mrr(sites) {
@@ -954,8 +915,7 @@ function mrr(sites) {
 }
 
 function exportSitesCSV() {
-  var sites = [];
-  try { sites = JSON.parse(localStorage.getItem('jv_sites') || '[]'); } catch (e) {}
+  var sites = state.sites;
   if (sites.length === 0) { toast('No sites to export', 'error'); return; }
 
   var headers = ['Name', 'Email', 'URL', 'Payment Method', 'Monthly Amount (£)', 'Domain Owned', 'Verified', 'Notes'];
@@ -976,8 +936,7 @@ function exportSitesCSV() {
 
 // ── DOMAINS VIEW ──────────────────────────────────────────────────────────────
 function viewDomains(view) {
-  var ncData = null;
-  try { ncData = JSON.parse(localStorage.getItem('nc_domains') || 'null'); } catch(e) {}
+  var ncData = state.domains;
   if (!ncData) {
     return '<div class="edit-inner"><div class="sticky-hd" style="display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap">' +
       '<div class="edit-title">Domains</div>' +
@@ -986,8 +945,7 @@ function viewDomains(view) {
       '<p style="color:var(--muted);font-size:13px;text-align:center;margin-top:40px">No domain data yet.<br>Use NC Sync to import your Namecheap domains.</p></div>';
   }
 
-  var sites = [];
-  try { sites = JSON.parse(localStorage.getItem('jv_sites') || '[]'); } catch(e) {}
+  var sites = state.sites;
 
   function hostname(url) {
     try { return new URL(url).hostname.replace('www.',''); } catch(e) { return url; }
@@ -1031,6 +989,9 @@ function viewDomains(view) {
 }
 
 // ── NC SYNC VIEW ──────────────────────────────────────────────────────────────
+// Credentials stay in local storage, not GitHub — this repo is public, and an
+// API key has no business sitting in a public JSON file. Domain data itself
+// (the actual list + expiry dates) goes to GitHub like everything else.
 function viewNcSync() {
   var u = localStorage.getItem('nc_username') || '';
   var ip = localStorage.getItem('nc_ip') || '';
@@ -1040,13 +1001,13 @@ function viewNcSync() {
     '<div class="card"><div class="card-title">Credentials</div>' +
     '<div class="field"><label>Username</label><input id="nc-u" value="' + esc(u) + '"></div>' +
     '<div class="field"><label>Whitelisted IP</label><input id="nc-ip" value="' + esc(ip) + '"></div>' +
-    '<div class="field-hint" style="margin-bottom:14px">Your API key is stored separately for security.</div>' +
+    '<div class="field-hint" style="margin-bottom:14px">Kept in this browser only — never sent to GitHub.</div>' +
     '<div class="field"><label>API Key</label><input id="nc-k" type="password" placeholder="paste key here"></div>' +
     '<div class="form-actions" style="margin-top:10px"><button class="btn-save" onclick="saveNcCreds()">Save Credentials</button></div>' +
     '</div>' +
 
     '<div class="card"><div class="card-title">Import Domain Data</div>' +
-    '<p style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.6">Run <code>node fetch-domains.js</code> in Terminal to generate <code>namecheap-domains.json</code>, then import it here.</p>' +
+    '<p style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.6">Run <code>node fetch-domains.js</code> in Terminal to generate <code>namecheap-domains.json</code>, then import it here. This gets pushed to GitHub immediately, no separate save step.</p>' +
     '<button class="btn-save" onclick="document.getElementById(\'nc-file\').click()" style="width:100%;text-align:center">Import namecheap-domains.json</button>' +
     '<input type="file" id="nc-file" accept=".json" style="display:none" onchange="importDomains(this)">' +
     '<div id="nc-status" style="font-size:12px;color:var(--muted);margin-top:10px;text-align:center"></div>' +
@@ -1063,38 +1024,43 @@ function saveNcCreds() {
   toast('Credentials saved', 'success');
 }
 
-function importDomains(input) {
+async function importDomains(input) {
   var file = input.files[0];
   if (!file) return;
   var reader = new FileReader();
-  reader.onload = function(e) {
+  reader.onload = async function(e) {
     try {
       var data = JSON.parse(e.target.result);
       if (!data.domains) throw new Error('Invalid format');
-      localStorage.setItem('nc_domains', JSON.stringify(data));
+      state.domains = data;
 
-      var sites = [];
-      try { sites = JSON.parse(localStorage.getItem('jv_sites') || '[]'); } catch(ex) {}
       function hostname(url) { try { return new URL(url).hostname.replace('www.',''); } catch(ex) { return url; } }
       var matched = 0;
-      var siteHosts = sites.map(function(s){ return hostname(s.url).toLowerCase(); });
+      var siteHosts = state.sites.map(function(s){ return hostname(s.url).toLowerCase(); });
       var unassigned = data.domains.filter(function(d){ return !siteHosts.includes(d.name.toLowerCase()); });
 
-      sites = sites.map(function(s) {
+      state.sites = state.sites.map(function(s) {
         var host = hostname(s.url);
         var match = data.domains.find(function(d){ return d.name.toLowerCase() === host.toLowerCase(); });
         if (match) { matched++; return Object.assign({}, s, { nc_expiry: match.expiry, nc_synced: new Date().toISOString(), domain_owned: true }); }
         return Object.assign({}, s, { domain_owned: false });
       });
-      localStorage.setItem('jv_sites', JSON.stringify(sites));
 
       var status = document.getElementById('nc-status');
+      if (status) {
+        status.style.color = 'var(--muted)';
+        status.textContent = 'Saving to GitHub…';
+      }
+
+      await autosaveDomainsNow();
+      await publishFile('sites', JSON.stringify(state.sites, null, 2), 'Update sites.json via NC Sync import');
+
       if (status) {
         status.style.color = '#2e7d32';
         status.textContent = '✓ ' + matched + ' cards matched · ' + data.domains.length + ' domains · ' + unassigned.length + ' unassigned';
       }
       input.value = '';
-      toast('Domains imported ✓', 'success');
+      toast('Domains imported and saved to GitHub ✓', 'success');
     } catch(err) {
       toast('Import failed: ' + err.message, 'error');
       input.value = '';
@@ -1110,28 +1076,20 @@ function viewSiteSettings() {
   return '<div class="edit-inner">' +
     '<div class="sticky-hd"><div class="edit-title">Site Settings</div><div class="edit-sub">Global site configuration</div></div>' +
     '<div class="card"><div class="card-title">Identity</div>' +
-    '<div class="field"><label>Site Name</label><input id="ss-name" value="' + esc(c.name||'Jetenvoieca') + '"></div>' +
-    '<div class="field"><label>Tagline</label><input id="ss-tag" value="' + esc(c.tagline||'Design · Artists · Commerce · Aude') + '"></div>' +
-    '<div class="field"><label>Primary Email</label><input id="ss-email" value="' + esc(c.email||'craig@jetenvoieca.com') + '"></div>' +
-    '<div class="field"><label>Location</label><input id="ss-loc" value="' + esc(c.location||'Near Narbonne, Aude, South of France') + '"></div>' +
+    '<div class="field"><label>Site Name</label><input id="ss-name" oninput="onSiteSettingsFieldChange()" value="' + esc(c.name||'Jetenvoieca') + '"></div>' +
+    '<div class="field"><label>Tagline</label><input id="ss-tag" oninput="onSiteSettingsFieldChange()" value="' + esc(c.tagline||'Design · Artists · Commerce · Aude') + '"></div>' +
+    '<div class="field"><label>Primary Email</label><input id="ss-email" oninput="onSiteSettingsFieldChange()" value="' + esc(c.email||'craig@jetenvoieca.com') + '"></div>' +
+    '<div class="field"><label>Location</label><input id="ss-loc" oninput="onSiteSettingsFieldChange()" value="' + esc(c.location||'Near Narbonne, Aude, South of France') + '"></div>' +
     '</div>' +
-    '<div class="form-actions"><button class="btn-save" onclick="saveSiteSettings()">Save</button></div>' +
     '</div>';
 }
 
-function saveSiteSettings() {
-  var previous = state.content.settings;
+function onSiteSettingsFieldChange() {
   state.content.settings = {
     name: val('ss-name'), tagline: val('ss-tag'),
     email: val('ss-email'), location: val('ss-loc')
   };
-  if (!saveContent()) {
-    state.content.settings = previous;
-    toast('Could not save — local storage is full', 'error');
-    return;
-  }
-  markUnsaved();
-  toast('Settings saved', 'success');
+  autosaveContent();
 }
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
@@ -1140,12 +1098,12 @@ function val(id) { var el = document.getElementById(id); return el ? el.value : 
 function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 window.onbeforeunload = function(e) {
-  if (state.hasUnsaved) { e.preventDefault(); e.returnValue = ''; return ''; }
+  if (state.pendingAutosave) { e.preventDefault(); e.returnValue = ''; return ''; }
 };
 
-// On load, quietly sync with whatever is live on the site so Bureau doesn't
-// show stale content after edits made from another device.
-loadFromGitHub(true);
+// GitHub is the source of truth — load everything from it before the first
+// render, rather than starting from local storage.
+loadAllFromGitHub(true);
 </script>
 </body>
 </html>
