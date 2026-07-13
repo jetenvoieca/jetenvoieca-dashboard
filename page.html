@@ -64,7 +64,7 @@ h1{
 
   <div class="top">
     <a href="index.html" class="wordmark">Jetenvoieca</a>
-    <nav>
+    <nav id="site-nav">
       <a href="index.html">Home</a>
       <a href="story.html">Story</a>
       <a href="contact.html">Contact</a>
@@ -81,6 +81,7 @@ h1{
 
 </div>
 
+<script src="nav.js"></script>
 <script>
 // Which page to show comes from ?slug=xxx in the URL. Bureau's preview pane
 // reads window.PAGE_SLUG to know which draft to inject when editing this page.
@@ -91,6 +92,7 @@ fetch('content.json', { cache: 'no-store' })
   .then(function(r) { return r.ok ? r.json() : null; })
   .then(function(data) {
     if (!data) { renderNotFound(); return; }
+    renderSiteNav(data, 'page.html?slug=' + window.PAGE_SLUG);
     var h = data.home || {};
     setText('footer-location', h.location);
 
