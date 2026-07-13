@@ -70,7 +70,7 @@
     {
       "id": "artists",
       "kind": "artists",
-      "inMenu": false
+      "inMenu": true
     },
     {
       "id": "retail",
