@@ -149,6 +149,8 @@ button,input,textarea,select{font-family:'Jost',sans-serif;font-size:13px;font-w
         <div class="acc-body open" id="acc-body-pages">
           <div class="acc-items">
             <button class="acc-item" onclick="showView('home')">Home</button>
+            <button class="acc-item" onclick="showView('artists')">Artists</button>
+            <button class="acc-item" onclick="showView('retail')">Commerce</button>
             <button class="acc-item" onclick="showView('story')">Story</button>
             <button class="acc-item" onclick="showView('contact')">Contact</button>
             <button class="acc-item" onclick="showView('settings-site')">Site Settings</button>
@@ -438,6 +440,20 @@ function applyDraftToFrame() {
     return;
   }
 
+  if (doc.getElementById('artists-title')) {
+    var a = (state.content && state.content.artists) || {};
+    setFrameText(doc, 'artists-eyebrow', a.eyebrow); setFrameText(doc, 'artists-title', a.title);
+    setFrameText(doc, 'artists-body', a.body); setFrameText(doc, 'artists-cta', a.cta);
+    return;
+  }
+
+  if (doc.getElementById('retail-title')) {
+    var r = (state.content && state.content.retail) || {};
+    setFrameText(doc, 'retail-eyebrow', r.eyebrow); setFrameText(doc, 'retail-title', r.title);
+    setFrameText(doc, 'retail-body', r.body); setFrameText(doc, 'retail-cta', r.cta);
+    return;
+  }
+
   var h = (state.content && state.content.home) || {};
   setFrameText(doc, 'eyebrow-1', h.eyebrow1); setFrameText(doc, 'title-1', h.title1); setFrameText(doc, 'body-1', h.body1);
   setFrameText(doc, 'eyebrow-2', h.eyebrow2); setFrameText(doc, 'title-2', h.title2); setFrameText(doc, 'body-2', h.body2);
@@ -548,6 +564,8 @@ function showView(view) {
   var pane = document.getElementById('edit-pane');
 
   if (view === 'home') { pane.innerHTML = viewHome(); setPreview('site', 'index.html'); }
+  else if (view === 'artists') { pane.innerHTML = viewArtists(); setPreview('site', 'artists.html'); }
+  else if (view === 'retail') { pane.innerHTML = viewRetail(); setPreview('site', 'retail.html'); }
   else if (view === 'story') { pane.innerHTML = viewStory(); setPreview('site', 'story.html'); }
   else if (view === 'contact') { pane.innerHTML = viewContact(); setPreview('site', 'contact.html'); }
   else if (view === 'sites-dashboard') { pane.innerHTML = viewSites(); setPreview('dashboard'); }
@@ -580,14 +598,17 @@ function viewHome() {
     '<div class="field"><label>Block 1 — Eyebrow</label><input id="h-e1" oninput="onHomeFieldChange()" value="' + esc(c.eyebrow1||'Artists') + '"></div>' +
     '<div class="field"><label>Block 1 — Title</label><input id="h-t1" oninput="onHomeFieldChange()" value="' + esc(c.title1||'Websites for Artists') + '"></div>' +
     '<div class="field"><label>Block 1 — Body</label><textarea id="h-b1" oninput="onHomeFieldChange()">' + esc(c.body1||'Beautiful, minimal portfolio sites. Built to show the work, not obscure it. Every site different. Every artist served.') + '</textarea></div>' +
+    '<div class="field"><label>Block 1 — Links to</label><input id="h-l1" oninput="onHomeFieldChange()" value="' + esc(c.link1||'artists.html') + '"></div>' +
 
     '<div class="field"><label>Block 2 — Eyebrow</label><input id="h-e2" oninput="onHomeFieldChange()" value="' + esc(c.eyebrow2||'Commerce') + '"></div>' +
     '<div class="field"><label>Block 2 — Title</label><input id="h-t2" oninput="onHomeFieldChange()" value="' + esc(c.title2||'Serendipity for Online Retail') + '"></div>' +
     '<div class="field"><label>Block 2 — Body</label><textarea id="h-b2" oninput="onHomeFieldChange()">' + esc(c.body2||'Discovery without search. A white-label layer that lets customers browse and find what they didn\'t know they wanted.') + '</textarea></div>' +
+    '<div class="field"><label>Block 2 — Links to</label><input id="h-l2" oninput="onHomeFieldChange()" value="' + esc(c.link2||'retail.html') + '"></div>' +
 
     '<div class="field"><label>Block 3 — Eyebrow</label><input id="h-e3" oninput="onHomeFieldChange()" value="' + esc(c.eyebrow3||'Studio') + '"></div>' +
     '<div class="field"><label>Block 3 — Title</label><input id="h-t3" oninput="onHomeFieldChange()" value="' + esc(c.title3||'Design that works differently') + '"></div>' +
     '<div class="field"><label>Block 3 — Body</label><textarea id="h-b3" oninput="onHomeFieldChange()">' + esc(c.body3||'Systems built from the user outward. Unconventional, accessible, effective. Users have loved them. IT departments less so.') + '</textarea></div>' +
+    '<div class="field"><label>Block 3 — Links to</label><input id="h-l3" oninput="onHomeFieldChange()" value="' + esc(c.link3||'story.html') + '"></div>' +
     '</div>' +
 
     '<div class="card"><div class="card-title">Footer</div>' +
@@ -600,9 +621,9 @@ function viewHome() {
 
 function onHomeFieldChange() {
   state.content.home = Object.assign({}, state.content.home, {
-    eyebrow1: val('h-e1'), title1: val('h-t1'), body1: val('h-b1'),
-    eyebrow2: val('h-e2'), title2: val('h-t2'), body2: val('h-b2'),
-    eyebrow3: val('h-e3'), title3: val('h-t3'), body3: val('h-b3'),
+    eyebrow1: val('h-e1'), title1: val('h-t1'), body1: val('h-b1'), link1: val('h-l1'),
+    eyebrow2: val('h-e2'), title2: val('h-t2'), body2: val('h-b2'), link2: val('h-l2'),
+    eyebrow3: val('h-e3'), title3: val('h-t3'), body3: val('h-b3'), link3: val('h-l3'),
     location: val('h-location'), email: val('h-email')
   });
   applyDraftToFrame();
@@ -669,6 +690,48 @@ function viewContact() {
 function onContactFieldChange() {
   state.content.contact = {
     email: val('c-email'), location: val('c-location'), intro: val('c-intro')
+  };
+  applyDraftToFrame();
+  autosaveContent();
+}
+
+// ── ARTISTS PAGE EDITOR ───────────────────────────────────────────────────────
+function viewArtists() {
+  var a = state.content.artists || {};
+  return '<div class="edit-inner">' +
+    '<div class="sticky-hd"><div class="edit-title">Artists Page</div><div class="edit-sub">Reached from the "Artists" block on Home</div></div>' +
+    '<div class="card"><div class="card-title">Content</div>' +
+    '<div class="field"><label>Eyebrow</label><input id="a-eyebrow" oninput="onArtistsFieldChange()" value="' + esc(a.eyebrow||'Artists') + '"></div>' +
+    '<div class="field"><label>Title</label><input id="a-title" oninput="onArtistsFieldChange()" value="' + esc(a.title||'Websites for Artists') + '"></div>' +
+    '<div class="field"><label>Body</label><textarea id="a-body" oninput="onArtistsFieldChange()" rows="4">' + esc(a.body||'Beautiful, minimal portfolio sites. Built to show the work, not obscure it. Every site different. Every artist served.') + '</textarea></div>' +
+    '<div class="field"><label>Call to Action Text</label><input id="a-cta" oninput="onArtistsFieldChange()" value="' + esc(a.cta||'Get in touch') + '"></div>' +
+    '</div></div>';
+}
+
+function onArtistsFieldChange() {
+  state.content.artists = {
+    eyebrow: val('a-eyebrow'), title: val('a-title'), body: val('a-body'), cta: val('a-cta')
+  };
+  applyDraftToFrame();
+  autosaveContent();
+}
+
+// ── COMMERCE / RETAIL PAGE EDITOR ─────────────────────────────────────────────
+function viewRetail() {
+  var r = state.content.retail || {};
+  return '<div class="edit-inner">' +
+    '<div class="sticky-hd"><div class="edit-title">Commerce Page</div><div class="edit-sub">Reached from the "Commerce" block on Home</div></div>' +
+    '<div class="card"><div class="card-title">Content</div>' +
+    '<div class="field"><label>Eyebrow</label><input id="r-eyebrow" oninput="onRetailFieldChange()" value="' + esc(r.eyebrow||'Commerce') + '"></div>' +
+    '<div class="field"><label>Title</label><input id="r-title" oninput="onRetailFieldChange()" value="' + esc(r.title||'Serendipity for Online Retail') + '"></div>' +
+    '<div class="field"><label>Body</label><textarea id="r-body" oninput="onRetailFieldChange()" rows="4">' + esc(r.body||'Discovery without search. A white-label layer that lets customers browse and find what they didn\'t know they wanted — alongside existing retail infrastructure.') + '</textarea></div>' +
+    '<div class="field"><label>Call to Action Text</label><input id="r-cta" oninput="onRetailFieldChange()" value="' + esc(r.cta||'Get in touch') + '"></div>' +
+    '</div></div>';
+}
+
+function onRetailFieldChange() {
+  state.content.retail = {
+    eyebrow: val('r-eyebrow'), title: val('r-title'), body: val('r-body'), cta: val('r-cta')
   };
   applyDraftToFrame();
   autosaveContent();
