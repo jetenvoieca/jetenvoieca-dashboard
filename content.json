@@ -49,11 +49,6 @@
       "inMenu": true
     },
     {
-      "id": "1783960877229",
-      "kind": "custom",
-      "inMenu": true
-    },
-    {
       "id": "story",
       "kind": "story",
       "inMenu": true
@@ -61,6 +56,11 @@
     {
       "id": "contact",
       "kind": "contact",
+      "inMenu": true
+    },
+    {
+      "id": "1783960877229",
+      "kind": "custom",
       "inMenu": true
     },
     {
