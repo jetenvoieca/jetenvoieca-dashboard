@@ -198,6 +198,18 @@ button,input,textarea,select{font-family:'Jost',sans-serif;font-size:13px;font-w
         </div>
       </div>
 
+      <!-- CUSTOM PAGES -->
+      <div class="acc-group">
+        <button class="acc-hd" id="acc-custompages" onclick="toggleAcc('custompages')">
+          Custom Pages <span class="chev">▼</span>
+        </button>
+        <div class="acc-body" id="acc-body-custompages">
+          <div class="acc-items">
+            <button class="acc-item" onclick="showView('custom-pages')">All Pages</button>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -454,6 +466,19 @@ function applyDraftToFrame() {
     return;
   }
 
+  // Generic custom pages (page.html?slug=xxx) — reuse the page's own render
+  // function directly rather than duplicating its markup logic here.
+  if (doc.getElementById('page-content') && iframe.contentWindow && typeof iframe.contentWindow.PAGE_SLUG === 'string') {
+    var pages = (state.content && state.content.pages) || [];
+    var pg = pages.find(function(p) { return p.slug === iframe.contentWindow.PAGE_SLUG; });
+    if (pg && pg.visible !== false && iframe.contentWindow.renderPage) {
+      iframe.contentWindow.renderPage(pg);
+    } else if (iframe.contentWindow.renderNotFound) {
+      iframe.contentWindow.renderNotFound();
+    }
+    return;
+  }
+
   var h = (state.content && state.content.home) || {};
   setFrameText(doc, 'eyebrow-1', h.eyebrow1); setFrameText(doc, 'title-1', h.title1); setFrameText(doc, 'body-1', h.body1);
   setFrameText(doc, 'eyebrow-2', h.eyebrow2); setFrameText(doc, 'title-2', h.title2); setFrameText(doc, 'body-2', h.body2);
@@ -574,6 +599,7 @@ function showView(view) {
   else if (view === 'settings-site') { pane.innerHTML = viewSiteSettings(); setPreview('site', 'index.html'); }
   else if (view === 'financial-accounts') pane.innerHTML = viewFinancialAccounts();
   else if (view === 'financial-settings') pane.innerHTML = viewFinancialSettings();
+  else if (view === 'custom-pages') pane.innerHTML = viewCustomPages();
   else pane.innerHTML = '<div class="edit-inner"><p style="color:var(--muted);font-size:13px;margin-top:40px;text-align:center">Coming soon</p></div>';
 
   wireView(view);
@@ -1224,6 +1250,204 @@ function onFinancialSettingsFieldChange() {
     vatRate: val('fs-vat'), urssafRate: val('fs-urssaf')
   };
   autosaveContent();
+}
+
+// ── CUSTOM PAGES ─────────────────────────────────────────────────────────────
+// Generic pages, all rendered by the single page.html template (?slug=xxx) so
+// adding one is just a content.json entry — no new files, no repo-write risk.
+var expandedPageId = null;
+var editingPageId = null;
+
+function viewCustomPages() {
+  var pages = state.content.pages || [];
+  return '<div class="edit-inner">' +
+    '<div class="sticky-hd" style="display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap">' +
+    '<div><div class="edit-title">Pages</div><div class="edit-sub">' + pages.length + ' custom page' + (pages.length === 1 ? '' : 's') + '</div></div>' +
+    '<button class="btn-cancel" onclick="startAddPage()">Add Page</button>' +
+    '</div>' +
+    '<div id="pages-list">' + renderPagesRows(pages) + '</div>' +
+    '</div>';
+}
+
+function renderPagesRows(pages) {
+  if (pages.length === 0) {
+    return '<p style="color:var(--muted);font-size:13px;text-align:center;margin-top:40px">No custom pages yet</p>';
+  }
+  return pages.map(function(p) {
+    var open = expandedPageId === p.id;
+    var hidden = p.visible === false;
+    var row = '<div onclick="selectPage(\'' + p.id + '\')" style="display:flex;align-items:center;padding:10px 0;gap:10px;cursor:pointer;' +
+      (open ? 'background:var(--ivory);margin:0 -8px;padding-left:8px;padding-right:8px;border-radius:4px 4px 0 0' : 'border-bottom:.5px solid var(--border)') + '">' +
+      '<div style="flex:1;min-width:0">' +
+      '<div style="font-family:\'Cormorant Garamond\',serif;font-size:15px;font-style:italic">' + (esc(p.title) || '<span style="color:var(--muted);font-style:normal">Untitled page</span>') + '</div>' +
+      '<div style="font-size:11px;color:var(--muted);margin-top:2px">/page.html?slug=' + esc(p.slug||'') + '</div></div>' +
+      '<span style="font-size:10px;flex-shrink:0;border-radius:10px;padding:2px 9px;border:.5px solid ' + (hidden ? 'var(--border);color:var(--muted)' : '#2e7d32;color:#2e7d32') + '">' + (hidden ? 'Hidden' : 'Visible') + '</span>' +
+      '</div>';
+    var panel = '';
+    if (editingPageId === p.id) panel = renderPageEditForm(p);
+    else if (open) panel = renderPageDetail(p);
+    return row + panel;
+  }).join('');
+}
+
+function renderPageDetail(p) {
+  var preview = (p.body || '').slice(0, 160);
+  if ((p.body || '').length > 160) preview += '…';
+  return '<div onclick="event.stopPropagation()" style="margin:0 -8px;padding:10px 8px 12px;background:var(--ivory);border-radius:0 0 4px 4px;border-bottom:.5px solid var(--border)">' +
+    (p.eyebrow ? '<div style="font-size:10px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px">' + esc(p.eyebrow) + '</div>' : '') +
+    '<div style="font-size:12px;color:rgba(26,23,20,.7);line-height:1.6;margin-bottom:12px">' + esc(preview || '—') + '</div>' +
+    '<button class="btn-cancel" onclick="startEditPage(\'' + p.id + '\')">Edit</button>' +
+    '</div>';
+}
+
+function renderPageEditForm(p) {
+  var id = p.id;
+  return '<div onclick="event.stopPropagation()" style="padding:16px 12px 18px;background:var(--ivory);border-radius:0 0 6px 6px;margin-bottom:2px">' +
+    '<div class="field"><label>Title</label><input id="pg-title-' + id + '" oninput="onPageFieldChange(\'' + id + '\')" value="' + esc(p.title) + '"></div>' +
+    '<div class="field"><label>Eyebrow (optional)</label><input id="pg-eyebrow-' + id + '" oninput="onPageFieldChange(\'' + id + '\')" value="' + esc(p.eyebrow||'') + '"></div>' +
+    '<div class="field"><label>URL Slug</label><input id="pg-slug-' + id + '" oninput="onPageSlugChange(\'' + id + '\')" value="' + esc(p.slug||'') + '">' +
+    '<div class="field-hint">Lives at page.html?slug=' + esc(p.slug||'') + '</div></div>' +
+    '<div class="field"><label>Image (optional)</label>' +
+    (p.image ? '<img src="' + p.image + '" style="max-height:90px;border-radius:4px;margin-bottom:8px;display:block">' : '') +
+    '<input type="file" id="pg-image-' + id + '" accept="image/*" onchange="onPageImageChange(\'' + id + '\')" style="padding:6px 0"></div>' +
+    '<div class="field"><label>Body</label><textarea id="pg-body-' + id + '" oninput="onPageFieldChange(\'' + id + '\')" rows="6">' + esc(p.body||'') + '</textarea></div>' +
+    '<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin-bottom:16px;cursor:pointer">' +
+    '<input type="checkbox" id="pg-visible-' + id + '" onchange="onPageFieldChange(\'' + id + '\')" style="width:auto"' + (p.visible !== false ? ' checked' : '') + '> Visible on the live site' +
+    '</label>' +
+    '<div class="form-actions">' +
+    '<button class="btn-cancel" onclick="deletePageInline(\'' + id + '\')">Delete</button>' +
+    '<button class="btn-save" onclick="closePageForm(\'' + id + '\')">Done</button>' +
+    '</div></div>';
+}
+
+function refreshPagesList() {
+  var container = document.getElementById('pages-list');
+  if (container) container.innerHTML = renderPagesRows(state.content.pages || []);
+}
+
+function refreshPagesHeader() {
+  var subEl = document.querySelector('#edit-pane .edit-sub');
+  var n = (state.content.pages || []).length;
+  if (subEl) subEl.textContent = n + ' custom page' + (n === 1 ? '' : 's');
+}
+
+function findPage(id) {
+  return (state.content.pages || []).find(function(p) { return p.id === id; });
+}
+
+function selectPage(id) {
+  if (expandedPageId === id) {
+    expandedPageId = null;
+    editingPageId = null;
+    setPreview(previewMode);
+  } else {
+    expandedPageId = id;
+    editingPageId = null;
+    var p = findPage(id);
+    if (p) setPreview('site', 'page.html?slug=' + encodeURIComponent(p.slug || ''));
+  }
+  refreshPagesList();
+}
+
+function startEditPage(id) {
+  editingPageId = id;
+  expandedPageId = id;
+  var p = findPage(id);
+  if (p) setPreview('site', 'page.html?slug=' + encodeURIComponent(p.slug || ''));
+  refreshPagesList();
+}
+
+// Closing an untouched just-created page quietly removes it, same pattern as Sites.
+function closePageForm(id) {
+  var p = findPage(id);
+  if (p && !p.title && !p.body) {
+    state.content.pages = (state.content.pages || []).filter(function(x) { return x.id !== id; });
+    autosaveContent();
+  }
+  editingPageId = null;
+  expandedPageId = null;
+  setPreview(previewMode);
+  refreshPagesList();
+  refreshPagesHeader();
+}
+
+function slugify(str) {
+  return (str || '').toLowerCase().trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '') || 'page';
+}
+
+function uniqueSlug(base, excludeId) {
+  var pages = state.content.pages || [];
+  var slug = base, n = 2;
+  while (pages.some(function(p) { return p.slug === slug && p.id !== excludeId; })) {
+    slug = base + '-' + n; n++;
+  }
+  return slug;
+}
+
+function onPageFieldChange(id) {
+  state.content.pages = (state.content.pages || []).map(function(p) {
+    if (p.id !== id) return p;
+    return Object.assign({}, p, {
+      title: val('pg-title-' + id),
+      eyebrow: val('pg-eyebrow-' + id),
+      body: val('pg-body-' + id),
+      visible: document.getElementById('pg-visible-' + id).checked
+    });
+  });
+  applyDraftToFrame();
+  autosaveContent();
+}
+
+function onPageSlugChange(id) {
+  var slug = uniqueSlug(slugify(val('pg-slug-' + id)), id);
+  var input = document.getElementById('pg-slug-' + id);
+  if (input && input.value !== slug) input.value = slug;
+  state.content.pages = (state.content.pages || []).map(function(p) {
+    return p.id === id ? Object.assign({}, p, { slug: slug }) : p;
+  });
+  setPreview('site', 'page.html?slug=' + encodeURIComponent(slug)); // URL changed, reload to it
+  autosaveContent();
+}
+
+async function onPageImageChange(id) {
+  var newImage;
+  try {
+    newImage = await readAndResizeImage('pg-image-' + id, 1200, 900, 0.85);
+  } catch (err) {
+    toast(err.message, 'error');
+    return;
+  }
+  if (!newImage) return;
+  state.content.pages = (state.content.pages || []).map(function(p) {
+    return p.id === id ? Object.assign({}, p, { image: newImage }) : p;
+  });
+  applyDraftToFrame();
+  autosaveContent();
+}
+
+function deletePageInline(id) {
+  if (!confirm('Delete this page?')) return;
+  state.content.pages = (state.content.pages || []).filter(function(p) { return p.id !== id; });
+  if (expandedPageId === id) { expandedPageId = null; setPreview(previewMode); }
+  editingPageId = null;
+  toast('Page deleted', 'success');
+  refreshPagesList();
+  refreshPagesHeader();
+  autosaveContent();
+}
+
+function startAddPage() {
+  var id = String(Date.now());
+  var page = { id: id, title: '', eyebrow: '', body: '', image: null, visible: true, slug: uniqueSlug('page', id) };
+  state.content.pages = state.content.pages || [];
+  state.content.pages.unshift(page);
+  editingPageId = id;
+  expandedPageId = id;
+  setPreview('site', 'page.html?slug=' + encodeURIComponent(page.slug));
+  refreshPagesList();
+  refreshPagesHeader();
 }
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
