@@ -59,11 +59,6 @@
       "inMenu": true
     },
     {
-      "id": "1783960877229",
-      "kind": "custom",
-      "inMenu": true
-    },
-    {
       "id": "artists",
       "kind": "artists",
       "inMenu": false
@@ -72,6 +67,11 @@
       "id": "retail",
       "kind": "retail",
       "inMenu": false
+    },
+    {
+      "id": "1783960877229",
+      "kind": "custom",
+      "inMenu": true
     }
   ]
 }
