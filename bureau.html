@@ -111,7 +111,7 @@ button,input,textarea,select{font-family:'Jost',sans-serif;font-size:13px;font-w
       <button class="preview-refresh" id="preview-open-tab" onclick="openFramedSiteNewTab()" title="Some sites block being shown inside another page — open it directly instead" style="display:none">Open in New Tab</button>
       <button class="preview-refresh" onclick="refreshPreview()" title="Refresh">Refresh</button>
     </div>
-    <iframe id="preview" src="https://jetenvoieca.com" title="Site preview"></iframe>
+    <iframe id="preview" src="/" title="Site preview" onload="handlePreviewLoad()"></iframe>
     <div id="preview-image-wrap" style="display:none;flex:1;align-items:center;justify-content:center;padding:60px;overflow:auto;background:var(--cream)">
       <img id="preview-image" style="display:none;max-width:70%;max-height:70%;object-fit:contain;border-radius:6px;box-shadow:0 10px 34px rgba(0,0,0,.14)">
       <div id="preview-image-fallback" style="display:none;flex-direction:column;align-items:center;gap:14px">
@@ -349,15 +349,57 @@ function setPreview(mode) {
   iframe.style.display = '';
   setFramedSiteButton(null);
 
+  // Relative paths (not the absolute jetenvoieca.com domain) — guarantees
+  // the iframe is same-origin as Bureau no matter which URL Bureau itself is
+  // opened from (custom domain or the netlify.app subdomain), which is what
+  // lets applyDraftToFrame reach into it below.
   if (mode === 'dashboard') {
     iframe.src = '/dashboard.html';
     urlLabel.textContent = 'jetenvoieca.com/dashboard';
   } else {
-    iframe.src = 'https://jetenvoieca.com';
+    iframe.src = '/';
     urlLabel.textContent = 'jetenvoieca.com';
   }
   var btn = document.getElementById('sites-preview-toggle');
   if (btn) btn.textContent = (mode === 'dashboard' ? 'Show Site' : 'Show Dashboard');
+}
+
+// Fires when the preview iframe finishes loading. If we're showing the live
+// site, pushes whatever's currently saved in Bureau (not yet Published) into
+// the loaded page directly — so the preview reflects your draft, not just
+// whatever was last published to GitHub.
+function handlePreviewLoad() {
+  if (previewMode === 'site') applyDraftToFrame();
+}
+
+function applyDraftToFrame() {
+  var iframe = document.getElementById('preview');
+  if (!iframe || previewMode !== 'site') return;
+  var doc;
+  try { doc = iframe.contentDocument; } catch (e) { return; } // cross-origin — leave the last-loaded page as-is
+  if (!doc || !doc.getElementById) return;
+
+  var h = (state.content && state.content.home) || {};
+  setFrameText(doc, 'eyebrow-1', h.eyebrow1); setFrameText(doc, 'title-1', h.title1); setFrameText(doc, 'body-1', h.body1);
+  setFrameText(doc, 'eyebrow-2', h.eyebrow2); setFrameText(doc, 'title-2', h.title2); setFrameText(doc, 'body-2', h.body2);
+  setFrameText(doc, 'eyebrow-3', h.eyebrow3); setFrameText(doc, 'title-3', h.title3); setFrameText(doc, 'body-3', h.body3);
+  setFrameText(doc, 'footer-location', h.location);
+  if (h.email) {
+    var emailEl = doc.getElementById('footer-email');
+    if (emailEl) { emailEl.textContent = h.email; emailEl.href = 'mailto:' + h.email; }
+  }
+  if (h.image) {
+    var heroImg = doc.getElementById('hero-image');
+    var heroSvg = doc.querySelector('.left svg');
+    if (heroImg) { heroImg.src = h.image; heroImg.style.display = 'block'; }
+    if (heroSvg) heroSvg.style.display = 'none';
+  }
+}
+
+function setFrameText(doc, id, value) {
+  if (!value) return;
+  var el = doc.getElementById(id);
+  if (el) el.textContent = value;
 }
 
 function toggleDashboard() {
@@ -415,6 +457,21 @@ function hostnameOf(url) {
   try { return new URL(url).hostname.replace('www.', ''); } catch (e) { return url; }
 }
 
+// Shows a thumbnail next to a file input as soon as a file is chosen —
+// purely visual, doesn't resize; the real resize happens on Save.
+function previewImageFile(inputId, previewImgId) {
+  var input = document.getElementById(inputId);
+  var img = document.getElementById(previewImgId);
+  var file = input && input.files && input.files[0];
+  if (!file || !img) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    img.src = e.target.result;
+    img.style.display = 'block';
+  };
+  reader.readAsDataURL(file);
+}
+
 // ── ACTIVE NAV ───────────────────────────────────────────────────────────────
 function setActiveNav(view) {
   document.querySelectorAll('.acc-item').forEach(function(b) { b.classList.remove('active'); });
@@ -431,13 +488,13 @@ function showView(view) {
   setActiveNav(view);
   var pane = document.getElementById('edit-pane');
 
-  if (view === 'home') pane.innerHTML = viewHome();
-  else if (view === 'story') pane.innerHTML = viewStory();
-  else if (view === 'contact') pane.innerHTML = viewContact();
+  if (view === 'home') { pane.innerHTML = viewHome(); setPreview('site'); }
+  else if (view === 'story') { pane.innerHTML = viewStory(); setPreview('site'); }
+  else if (view === 'contact') { pane.innerHTML = viewContact(); setPreview('site'); }
   else if (view === 'sites-dashboard') { pane.innerHTML = viewSites(); setPreview('dashboard'); }
   else if (view === 'domains-all' || view === 'domains-unassigned') pane.innerHTML = viewDomains(view);
   else if (view === 'domains-sync') pane.innerHTML = viewNcSync();
-  else if (view === 'settings-site') pane.innerHTML = viewSiteSettings();
+  else if (view === 'settings-site') { pane.innerHTML = viewSiteSettings(); setPreview('site'); }
   else pane.innerHTML = '<div class="edit-inner"><p style="color:var(--muted);font-size:13px;margin-top:40px;text-align:center">Coming soon</p></div>';
 
   wireView(view);
@@ -451,8 +508,10 @@ function viewHome() {
 
     '<div class="card"><div class="card-title">Homepage Image</div>' +
     '<p style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">Fills the panel to the left of the text on the homepage, edge to edge. Leave blank to keep the current artwork.</p>' +
-    (c.image ? '<img src="' + c.image + '" style="max-height:160px;border-radius:4px;margin-bottom:10px;display:block">' : '') +
-    '<input type="file" id="h-image" accept="image/*" style="padding:6px 0">' +
+    '<div style="display:flex;align-items:center;gap:12px">' +
+    '<img id="h-image-preview" src="' + (c.image || '') + '" style="width:64px;height:64px;object-fit:cover;border-radius:4px;background:var(--border);display:' + (c.image ? 'block' : 'none') + ';flex-shrink:0">' +
+    '<input type="file" id="h-image" accept="image/*" onchange="previewImageFile(\'h-image\',\'h-image-preview\')" style="padding:6px 0">' +
+    '</div>' +
     '</div>' +
 
     '<div class="card"><div class="card-title">Three Message Blocks</div>' +
@@ -491,6 +550,7 @@ async function saveHome() {
     image: newImage || existing.image || null
   };
   saveContent(); markUnsaved();
+  applyDraftToFrame();
   toast('Home page saved', 'success');
 }
 
