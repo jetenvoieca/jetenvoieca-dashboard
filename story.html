@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Story — Jetenvoieca</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=Inter:wght@300;400&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',sans-serif;background:#F0E8C8;color:#1a1714;min-height:100vh}
+
+.wrap{max-width:640px;margin:0 auto;padding:56px 32px 80px}
+
+.top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:80px;flex-wrap:wrap;gap:20px}
+.wordmark{
+  font-family:'Cormorant Garamond',serif;
+  font-size:11px;font-weight:300;
+  letter-spacing:.32em;text-transform:uppercase;
+  color:#1a1714;opacity:.55;text-decoration:none;
+}
+nav{display:flex;gap:22px}
+nav a{
+  font-family:'Cormorant Garamond',serif;
+  font-size:17px;font-weight:300;font-style:italic;
+  letter-spacing:.06em;color:#1a1714;text-decoration:none;
+  opacity:.4;transition:opacity .2s;
+}
+nav a:hover,nav a.active{opacity:1}
+nav a.active{font-style:normal;opacity:.85}
+
+h1{
+  font-family:'Cormorant Garamond',serif;
+  font-size:44px;font-weight:300;line-height:1.1;
+  margin-bottom:14px;
+}
+.subtitle{
+  font-family:'Cormorant Garamond',serif;
+  font-size:17px;font-style:italic;
+  color:rgba(26,23,20,0.55);
+  margin-bottom:56px;
+}
+
+.chapter{
+  font-size:14px;line-height:1.85;
+  color:rgba(26,23,20,0.72);
+  letter-spacing:.015em;
+  margin-bottom:32px;
+}
+.chapter:first-of-type{
+  font-family:'Cormorant Garamond',serif;
+  font-size:19px;font-style:italic;
+  color:#1a1714;line-height:1.6;
+}
+
+.footer-area{display:flex;flex-direction:column;gap:5px;margin-top:80px;padding-top:24px;border-top:0.5px solid rgba(26,23,20,0.18)}
+.footer-area span{
+  font-size:9px;letter-spacing:.18em;text-transform:uppercase;
+  color:rgba(26,23,20,0.35);
+}
+.footer-area a{
+  font-size:9px;letter-spacing:.18em;text-transform:uppercase;
+  color:#B8561E;text-decoration:none;opacity:.75;transition:opacity .2s;
+}
+.footer-area a:hover{opacity:1}
+
+@media(max-width:600px){
+  h1{font-size:32px}
+  .top{margin-bottom:56px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="top">
+    <a href="index.html" class="wordmark">Jetenvoieca</a>
+    <nav>
+      <a href="index.html">Home</a>
+      <a href="story.html" class="active">Story</a>
+      <a href="contact.html">Contact</a>
+    </nav>
+  </div>
+
+  <h1 id="story-title">Design that happens for a reason</h1>
+  <div class="subtitle" id="story-subtitle">South of France · Since 2020</div>
+
+  <div class="chapter" id="story-c1">We were caught on holiday in the South of France by the lockdown — the confinement. During which the house next to the one we were renting came up for sale. So we bought it and stayed. We believe things sort of happen for a reason.</div>
+  <div class="chapter" id="story-c2">My passion for design, practicability and useability have driven me all my life. I designed systems for lawyers, banks, car leasing, government departments — successfully in the 1990s. The IT departments hated them because they didn't conform. Users loved them. In one government department they had to rotate users on to our system to avoid a strike.</div>
+  <div class="chapter" id="story-c3">Different and better are key to me. I try to keep all functionality accessible — deep menu structures I hate. Minimalist, elegant, effective. Content left, actions right.</div>
+
+  <div class="footer-area">
+    <span id="footer-location">Aude · South of France</span>
+    <a href="mailto:craig@jetenvoieca.com" id="footer-email">craig@jetenvoieca.com</a>
+  </div>
+
+</div>
+
+<script>
+fetch('content.json', { cache: 'no-store' })
+  .then(function(r) { return r.ok ? r.json() : null; })
+  .then(function(data) {
+    if (!data) return;
+    var s = data.story || {};
+    setText('story-title', s.title); setText('story-subtitle', s.subtitle);
+    setText('story-c1', s.chapter1); setText('story-c2', s.chapter2); setText('story-c3', s.chapter3);
+    var h = data.home || {};
+    setText('footer-location', h.location);
+    if (h.email) {
+      var emailEl = document.getElementById('footer-email');
+      if (emailEl) { emailEl.textContent = h.email; emailEl.href = 'mailto:' + h.email; }
+    }
+  })
+  .catch(function() { /* offline or first deploy — static copy stands */ });
+
+function setText(id, value) {
+  if (!value) return;
+  var el = document.getElementById(id);
+  if (el) el.textContent = value;
+}
+</script>
+</body>
+</html>
