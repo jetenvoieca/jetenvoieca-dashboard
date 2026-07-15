@@ -101,6 +101,13 @@ button,input,textarea,select{font-family:'Jost',sans-serif;font-size:13px;font-w
 </head>
 <body>
 
+<div id="login-overlay" style="position:fixed;inset:0;background:var(--cream);z-index:999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px">
+  <div style="font-family:'Cormorant Garamond',serif;font-size:34px;font-style:italic;color:var(--noir)">Bureau</div>
+  <input type="password" id="login-password" placeholder="Password" onkeydown="if(event.key==='Enter'){attemptLogin();}" style="width:220px;padding:10px 14px;border:.5px solid var(--border);border-radius:4px;font-family:inherit;font-size:14px;outline:none;text-align:center;background:white">
+  <button id="login-btn" class="btn-save" onclick="attemptLogin()" style="width:220px">Enter</button>
+  <div id="login-error" style="color:#c0392b;font-size:12px;min-height:16px"></div>
+</div>
+
 <div class="shell">
 
   <!-- LEFT: Preview -->
@@ -139,6 +146,7 @@ button,input,textarea,select{font-family:'Jost',sans-serif;font-size:13px;font-w
       <div class="action-row">
         <button class="btn-publish" id="btn-publish" onclick="publish()">Publish</button>
         <div class="publish-status" id="publish-status">All changes published</div>
+        <button onclick="logout()" style="background:none;border:none;color:rgba(255,255,255,.3);font-size:10px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;padding:8px 0 0;width:100%;font-family:'Jost',sans-serif">Log Out</button>
       </div>
 
       <div class="nav-divider"></div>
@@ -154,6 +162,18 @@ button,input,textarea,select{font-family:'Jost',sans-serif;font-size:13px;font-w
       </div>
 
       <div class="nav-divider"></div>
+
+      <!-- EMAIL -->
+      <div class="acc-group">
+        <button class="acc-hd" id="acc-email" onclick="toggleAcc('email')">
+          Email <span class="chev">▼</span>
+        </button>
+        <div class="acc-body" id="acc-body-email">
+          <div class="acc-items">
+            <button class="acc-item" onclick="showView('email-inbox')">Inbox</button>
+          </div>
+        </div>
+      </div>
 
       <!-- MANAGEMENT -->
       <div class="acc-group">
@@ -348,7 +368,7 @@ async function publish() {
 }
 
 async function publishFile(target, content, message) {
-  var res = await fetch('/.netlify/functions/publish-content', {
+  var res = await authFetch('/.netlify/functions/publish-content', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ target: target, content: content, message: message })
@@ -619,6 +639,7 @@ function showView(view) {
   else if (view === 'contacts-mailings') pane.innerHTML = viewComingSoon('E-Mailings');
   else if (view === 'contacts-press') pane.innerHTML = viewComingSoon('Press Releases');
   else if (view === 'contacts-support') pane.innerHTML = viewComingSoon('Support');
+  else if (view === 'email-inbox') { pane.innerHTML = viewEmailInbox(); loadEmailInbox(); }
   else if (view.indexOf('page:') === 0) {
     var pgId = view.slice(5);
     pane.innerHTML = viewSingleCustomPage(pgId);
@@ -1510,6 +1531,217 @@ function startAddContact() {
   refreshContactsHeader();
 }
 
+// ── EMAIL INBOX ────────────────────────────────────────────────────────────────
+// Talks to the email-inbox / email-send Netlify functions, which hold the
+// mailbox password server-side (EMAIL_USER / EMAIL_PASSWORD env vars) —
+// never touches this browser. Not preloaded like content/sites/contacts,
+// since it's live external data rather than something stored in the repo.
+var emailMessages = [];
+var emailLoading = false;
+var expandedEmailUid = null;
+var emailBodyCache = {};
+var composingEmail = false;
+var replyingToUid = null;
+
+function viewEmailInbox() {
+  return '<div class="edit-inner">' +
+    '<div class="sticky-hd" style="display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap">' +
+    '<div><div class="edit-title">Inbox</div><div class="edit-sub" id="email-sub">' + (emailLoading ? 'Loading…' : emailMessages.length + ' message' + (emailMessages.length === 1 ? '' : 's')) + '</div></div>' +
+    '<div style="display:flex;gap:8px">' +
+    '<button class="btn-cancel" onclick="loadEmailInbox()">Refresh</button>' +
+    '<button class="btn-cancel" onclick="startComposeEmail()">New Email</button>' +
+    '</div></div>' +
+    '<div id="email-list">' + renderEmailList() + '</div>' +
+    '</div>';
+}
+
+async function loadEmailInbox() {
+  emailLoading = true;
+  var subEl = document.getElementById('email-sub');
+  if (subEl) subEl.textContent = 'Loading…';
+  try {
+    var res = await authFetch('/.netlify/functions/email-inbox');
+    var json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Failed to load inbox');
+    emailMessages = json.messages || [];
+  } catch (err) {
+    toast('Could not load inbox: ' + err.message, 'error');
+    emailMessages = [];
+  }
+  emailLoading = false;
+  if (state.currentView === 'email-inbox') {
+    var pane = document.getElementById('edit-pane');
+    if (pane) pane.innerHTML = viewEmailInbox();
+  }
+}
+
+function renderEmailList() {
+  if (emailLoading) return '<p style="color:var(--muted);font-size:13px;text-align:center;margin-top:40px">Loading…</p>';
+
+  var html = '';
+  if (composingEmail) html += renderComposeForm();
+
+  if (emailMessages.length === 0) {
+    if (!composingEmail) html += '<p style="color:var(--muted);font-size:13px;text-align:center;margin-top:40px">No messages</p>';
+    return html;
+  }
+
+  html += emailMessages.map(function(m) {
+    var open = expandedEmailUid === m.uid;
+    var row = '<div onclick="selectEmail(' + m.uid + ')" style="display:flex;align-items:center;gap:10px;padding:10px 0;cursor:pointer;' +
+      (open ? 'background:var(--ivory);margin:0 -8px;padding-left:8px;padding-right:8px;border-radius:4px 4px 0 0' : 'border-bottom:.5px solid var(--border)') + '">' +
+      (m.unread ? '<span style="width:7px;height:7px;border-radius:50%;background:var(--pink);flex-shrink:0"></span>' : '<span style="width:7px;flex-shrink:0"></span>') +
+      '<div style="flex:1;min-width:0">' +
+      '<div style="font-size:13px;color:var(--noir)">' + esc(m.from) + '</div>' +
+      '<div style="font-size:12px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(m.subject) + '</div>' +
+      '</div>' +
+      '<div style="font-size:10px;color:var(--muted);flex-shrink:0">' + formatEmailDate(m.date) + '</div>' +
+      '</div>';
+    var panel = open ? renderEmailDetail(m) : '';
+    return row + panel;
+  }).join('');
+  return html;
+}
+
+function formatEmailDate(d) {
+  if (!d) return '';
+  var dt = new Date(d);
+  var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return dt.getDate() + ' ' + months[dt.getMonth()];
+}
+
+function selectEmail(uid) {
+  composingEmail = false;
+  if (expandedEmailUid === uid) {
+    expandedEmailUid = null;
+    replyingToUid = null;
+  } else {
+    expandedEmailUid = uid;
+  }
+  refreshEmailList();
+}
+
+function refreshEmailList() {
+  var container = document.getElementById('email-list');
+  if (container) container.innerHTML = renderEmailList();
+}
+
+function renderEmailDetail(m) {
+  var cached = emailBodyCache[m.uid];
+  if (!cached) {
+    loadEmailBody(m.uid);
+    return '<div onclick="event.stopPropagation()" style="padding:14px 8px;background:var(--ivory);border-radius:0 0 4px 4px;border-bottom:.5px solid var(--border)">' +
+      '<p style="font-size:12px;color:var(--muted)">Loading message…</p></div>';
+  }
+  var bodyText = cached.text || stripHtmlTags(cached.html) || '(empty message)';
+  var replyForm = '';
+  if (replyingToUid === m.uid) {
+    var defaultSubject = (m.subject || '').indexOf('Re:') === 0 ? m.subject : 'Re: ' + m.subject;
+    replyForm = '<div style="margin-top:14px;padding-top:14px;border-top:.5px solid var(--border)">' +
+      '<div class="field"><label>To</label><input id="reply-to" value="' + esc(cached.from) + '"></div>' +
+      '<div class="field"><label>Subject</label><input id="reply-subject" value="' + esc(defaultSubject) + '"></div>' +
+      '<div class="field"><label>Message</label><textarea id="reply-body" rows="6"></textarea></div>' +
+      '<div class="form-actions"><button class="btn-cancel" onclick="cancelReply()">Cancel</button><button class="btn-save" onclick="sendReply(' + m.uid + ')">Send</button></div>' +
+      '</div>';
+  }
+  return '<div onclick="event.stopPropagation()" style="padding:14px 8px 16px;background:var(--ivory);border-radius:0 0 4px 4px;border-bottom:.5px solid var(--border)">' +
+    '<div style="font-size:11px;color:var(--muted);margin-bottom:10px">From ' + esc(cached.from) + (cached.to ? ' · To ' + esc(cached.to) : '') + '</div>' +
+    '<div style="font-size:13px;line-height:1.7;white-space:pre-wrap;margin-bottom:16px">' + esc(bodyText) + '</div>' +
+    (replyingToUid === m.uid ? replyForm : '<button class="btn-save" onclick="startReplyEmail(' + m.uid + ')">Reply</button>') +
+    '</div>';
+}
+
+function stripHtmlTags(html) {
+  return (html || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+async function loadEmailBody(uid) {
+  try {
+    var res = await authFetch('/.netlify/functions/email-inbox?uid=' + uid);
+    var json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Failed to load message');
+    emailBodyCache[uid] = json;
+  } catch (err) {
+    emailBodyCache[uid] = { text: 'Could not load this message: ' + err.message, from: '', to: '', messageId: '' };
+  }
+  if (expandedEmailUid === uid) refreshEmailList();
+}
+
+function startReplyEmail(uid) {
+  replyingToUid = uid;
+  refreshEmailList();
+}
+
+function cancelReply() {
+  replyingToUid = null;
+  refreshEmailList();
+}
+
+async function sendReply(uid) {
+  var to = val('reply-to').trim();
+  var subject = val('reply-subject').trim();
+  var text = val('reply-body').trim();
+  if (!to || !text) { toast('To and message are required', 'error'); return; }
+  var cached = emailBodyCache[uid] || {};
+  try {
+    var res = await authFetch('/.netlify/functions/email-send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: to, subject: subject, text: text, inReplyTo: cached.messageId, references: cached.messageId })
+    });
+    var json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Send failed');
+    toast('Sent ✓', 'success');
+    replyingToUid = null;
+    refreshEmailList();
+  } catch (err) {
+    toast('Send failed: ' + err.message, 'error');
+  }
+}
+
+function startComposeEmail() {
+  composingEmail = true;
+  expandedEmailUid = null;
+  replyingToUid = null;
+  refreshEmailList();
+}
+
+function cancelCompose() {
+  composingEmail = false;
+  refreshEmailList();
+}
+
+function renderComposeForm() {
+  return '<div onclick="event.stopPropagation()" style="padding:16px 12px 18px;background:var(--ivory);border-radius:6px;margin-bottom:12px">' +
+    '<div class="card-title" style="margin-bottom:10px">New Email</div>' +
+    '<div class="field"><label>To</label><input id="compose-to" placeholder="name@example.com"></div>' +
+    '<div class="field"><label>Subject</label><input id="compose-subject"></div>' +
+    '<div class="field"><label>Message</label><textarea id="compose-body" rows="8"></textarea></div>' +
+    '<div class="form-actions"><button class="btn-cancel" onclick="cancelCompose()">Cancel</button><button class="btn-save" onclick="sendComposeEmail()">Send</button></div>' +
+    '</div>';
+}
+
+async function sendComposeEmail() {
+  var to = val('compose-to').trim();
+  var subject = val('compose-subject').trim();
+  var text = val('compose-body').trim();
+  if (!to || !text) { toast('To and message are required', 'error'); return; }
+  try {
+    var res = await authFetch('/.netlify/functions/email-send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: to, subject: subject, text: text })
+    });
+    var json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Send failed');
+    toast('Sent ✓', 'success');
+    composingEmail = false;
+    refreshEmailList();
+  } catch (err) {
+    toast('Send failed: ' + err.message, 'error');
+  }
+}
+
 // ── PAGES NAV (bespoke + custom, unified, draggable) ──────────────────────────
 // The sidebar Pages list is generated from state.content.navPages — an
 // ordered list of {id, kind, inMenu}. Bespoke pages (home/story/contact/
@@ -1758,10 +1990,98 @@ window.onbeforeunload = function(e) {
   if (state.pendingAutosave) { e.preventDefault(); e.returnValue = ''; return ''; }
 };
 
-// GitHub is the source of truth — load everything from it before the first
-// render, rather than starting from local storage.
-renderPagesNav();
-loadAllFromGitHub(true);
+// ── AUTH ─────────────────────────────────────────────────────────────────────
+// Session token stored locally, sent as a Bearer header to every function
+// that touches something sensitive (GitHub publish, email). The functions
+// themselves verify it server-side — this isn't just a UI gate, a request
+// straight to a function URL without a valid token is rejected too.
+function getStoredToken() {
+  try {
+    var raw = localStorage.getItem('bureau_session');
+    if (!raw) return null;
+    var data = JSON.parse(raw);
+    if (!data.token || !data.expires || Date.now() > data.expires) return null;
+    return data.token;
+  } catch (e) { return null; }
+}
+
+function storeToken(token) {
+  var expires = parseInt(token.split('.')[0], 10) || (Date.now() + 1000 * 60 * 60 * 24 * 14);
+  localStorage.setItem('bureau_session', JSON.stringify({ token: token, expires: expires }));
+}
+
+function clearToken() {
+  localStorage.removeItem('bureau_session');
+}
+
+function authHeaders() {
+  var token = getStoredToken();
+  return token ? { 'Authorization': 'Bearer ' + token } : {};
+}
+
+// Wraps fetch for anything requiring login — adds the token, and bounces
+// back to the login screen if the server says the session's no good.
+async function authFetch(url, options) {
+  options = options || {};
+  options.headers = Object.assign({}, options.headers, authHeaders());
+  var res = await fetch(url, options);
+  if (res.status === 401) {
+    clearToken();
+    showLoginScreen('Session expired — please log in again');
+    throw new Error('Session expired — please log in again');
+  }
+  return res;
+}
+
+function showLoginScreen(errorMsg) {
+  var overlay = document.getElementById('login-overlay');
+  if (overlay) overlay.style.display = 'flex';
+  var err = document.getElementById('login-error');
+  if (err) err.textContent = errorMsg || '';
+}
+
+function hideLoginScreen() {
+  var overlay = document.getElementById('login-overlay');
+  if (overlay) overlay.style.display = 'none';
+}
+
+async function attemptLogin() {
+  var pw = document.getElementById('login-password').value;
+  var btn = document.getElementById('login-btn');
+  btn.disabled = true;
+  try {
+    var res = await fetch('/.netlify/functions/auth-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw })
+    });
+    var json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Incorrect password');
+    storeToken(json.token);
+    hideLoginScreen();
+    initBureau();
+  } catch (err) {
+    showLoginScreen(err.message);
+  }
+  btn.disabled = false;
+}
+
+function logout() {
+  clearToken();
+  location.reload();
+}
+
+function initBureau() {
+  renderPagesNav();
+  loadAllFromGitHub(true);
+}
+
+if (getStoredToken()) {
+  hideLoginScreen();
+  initBureau();
+} else {
+  showLoginScreen();
+}
 </script>
 </body>
 </html>
