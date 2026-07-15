@@ -25,10 +25,14 @@ exports.handler = async function (event) {
 
   try {
     await client.connect();
-    const lock = await client.getMailboxLock('INBOX');
-    try {
-      // Single message — full body, for when a message is opened
-      if (params.uid) {
+
+    // ── Single message — full body, for when a message is opened.
+    // mailbox defaults to INBOX (matches the plain inbox list below), but a
+    // message found via contactEmail search may live in the Sent folder.
+    if (params.uid) {
+      const mailbox = params.mailbox || 'INBOX';
+      const lock = await client.getMailboxLock(mailbox);
+      try {
         const msg = await client.fetchOne(params.uid, { source: true }, { uid: true });
         if (!msg) return { statusCode: 404, body: JSON.stringify({ error: 'Message not found' }) };
         const parsed = await simpleParser(msg.source);
@@ -37,6 +41,7 @@ exports.handler = async function (event) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             uid: msg.uid,
+            mailbox: mailbox,
             from: (parsed.from && parsed.from.text) || '(unknown)',
             to: (parsed.to && parsed.to.text) || '',
             subject: parsed.subject || '(no subject)',
@@ -46,9 +51,74 @@ exports.handler = async function (event) {
             html: parsed.html || ''
           })
         };
+      } finally {
+        lock.release();
+      }
+    }
+
+    // ── Emails involving one specific address — checks Inbox (received from
+    // them) and Sent (sent to them), for the Contacts page's email history.
+    if (params.contactEmail) {
+      const address = params.contactEmail;
+      const messages = [];
+      const CAP = 30; // most recent per folder, keeps this fast
+
+      const inboxLock = await client.getMailboxLock('INBOX');
+      try {
+        const uids = await client.search({ from: address }, { uid: true });
+        if (uids && uids.length) {
+          const recent = uids.slice(-CAP);
+          for await (const msg of client.fetch(recent, { envelope: true }, { uid: true })) {
+            messages.push({
+              uid: msg.uid,
+              mailbox: 'INBOX',
+              direction: 'received',
+              from: envelopeName(msg.envelope.from),
+              to: envelopeName(msg.envelope.to),
+              subject: msg.envelope.subject || '(no subject)',
+              date: msg.envelope.date
+            });
+          }
+        }
+      } finally {
+        inboxLock.release();
       }
 
-      // Otherwise — list recent messages, newest first
+      const sentPath = await findSentFolder(client);
+      if (sentPath) {
+        const sentLock = await client.getMailboxLock(sentPath);
+        try {
+          const uids = await client.search({ to: address }, { uid: true });
+          if (uids && uids.length) {
+            const recent = uids.slice(-CAP);
+            for await (const msg of client.fetch(recent, { envelope: true }, { uid: true })) {
+              messages.push({
+                uid: msg.uid,
+                mailbox: sentPath,
+                direction: 'sent',
+                from: envelopeName(msg.envelope.from),
+                to: envelopeName(msg.envelope.to),
+                subject: msg.envelope.subject || '(no subject)',
+                date: msg.envelope.date
+              });
+            }
+          }
+        } finally {
+          sentLock.release();
+        }
+      }
+
+      messages.sort(function (a, b) { return new Date(b.date) - new Date(a.date); });
+      return {
+        statusCode: 200,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: messages, sentFolderFound: !!sentPath })
+      };
+    }
+
+    // ── Otherwise — list recent Inbox messages, newest first (unchanged).
+    const lock = await client.getMailboxLock('INBOX');
+    try {
       const status = await client.status('INBOX', { messages: true });
       const total = status.messages || 0;
       const limit = 50;
@@ -82,3 +152,24 @@ exports.handler = async function (event) {
     try { await client.logout(); } catch (e) { /* connection may already be closed */ }
   }
 };
+
+function envelopeName(list) {
+  if (!list || !list.length) return '';
+  const a = list[0];
+  return a.name || a.address || '';
+}
+
+// Uses the IMAP SPECIAL-USE extension (\Sent flag) when the server supports
+// it, falling back to common folder names otherwise. Never guesses blindly —
+// if neither works, contact email history just shows Received only.
+async function findSentFolder(client) {
+  try {
+    const list = await client.list();
+    const special = list.find(function (mb) { return mb.specialUse === '\\Sent'; });
+    if (special) return special.path;
+    const byName = list.find(function (mb) { return /^sent/i.test(mb.name) || /sent items/i.test(mb.name); });
+    return byName ? byName.path : null;
+  } catch (e) {
+    return null;
+  }
+}
