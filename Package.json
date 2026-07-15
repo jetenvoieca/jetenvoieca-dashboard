@@ -1,0 +1,10 @@
+{
+  "name": "jetenvoieca-dashboard-functions",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "imapflow": "^1.0.171",
+    "mailparser": "^3.7.1",
+    "nodemailer": "^6.9.14"
+  }
+}
