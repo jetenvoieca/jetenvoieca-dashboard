@@ -1032,7 +1032,8 @@ function syncSiteToContact(siteId) {
     return Object.assign({}, c, {
       firstName: site.artistFirstName || '',
       lastName: site.artistLastName || '',
-      email: site.email || ''
+      email: site.email || '',
+      business: site.url || ''
     });
   });
   autosaveContacts();
@@ -1454,6 +1455,7 @@ function viewAllContacts() {
     '<div><div class="edit-title">All Contacts</div><div class="edit-sub">' + contacts.length + ' contact' + (contacts.length === 1 ? '' : 's') + '</div></div>' +
     '<div style="display:flex;gap:8px">' +
     '<button class="btn-cancel" onclick="importContactsFromSites()">Import from Sites</button>' +
+    '<button class="btn-cancel" onclick="fillArtistDefaults()">Fill Artist Defaults</button>' +
     '<button class="btn-cancel" onclick="startAddContact()">Add Contact</button>' +
     '</div></div>' +
     '<div id="contacts-list">' + renderContactsRows(contacts) + '</div>' +
@@ -1608,6 +1610,14 @@ function splitNameGuess(fullName) {
   return { first: parts.slice(0, -1).join(' '), last: parts[parts.length - 1] };
 }
 
+var ARTIST_TAG = 'Artists';
+var ARTIST_SOURCE = 'Isendyouthis Artist';
+
+function ensureContactSetting(kind, value) {
+  var cs = getContactSettings();
+  if (cs[kind].indexOf(value) === -1) cs[kind].push(value);
+}
+
 function importContactsFromSites() {
   var sites = state.sites || [];
   var unlinked = sites.filter(function(s) { return !s.contactId; });
@@ -1615,6 +1625,9 @@ function importContactsFromSites() {
     toast('All sites are already linked to a contact', 'error');
     return;
   }
+
+  ensureContactSetting('tags', ARTIST_TAG);
+  ensureContactSetting('sources', ARTIST_SOURCE);
 
   var imported = 0;
   state.sites = sites.map(function(s) {
@@ -1631,7 +1644,7 @@ function importContactsFromSites() {
     var contactId = String(Date.now()) + '-' + imported;
     state.contacts.push({
       id: contactId, firstName: first, lastName: last,
-      business: '', email: s.email || '', source: '', tags: []
+      business: s.url || '', email: s.email || '', source: ARTIST_SOURCE, tags: [ARTIST_TAG]
     });
     imported++;
 
@@ -1640,9 +1653,37 @@ function importContactsFromSites() {
 
   refreshContactsList();
   refreshContactsHeader();
+  autosaveContent();
   autosaveContacts();
   autosaveSites();
   toast('Imported ' + imported + ' contact' + (imported === 1 ? '' : 's') + ' from Sites ✓', 'success');
+}
+
+// One-off catch-up for contacts imported before the Artist tag/source/business
+// defaults existed — brings any already-linked contact into line, safe to
+// run again any time (it's idempotent).
+function fillArtistDefaults() {
+  ensureContactSetting('tags', ARTIST_TAG);
+  ensureContactSetting('sources', ARTIST_SOURCE);
+
+  var updated = 0;
+  state.contacts = (state.contacts || []).map(function(c) {
+    var site = findLinkedSite(c.id);
+    if (!site) return c;
+    updated++;
+    var tags = (c.tags || []).slice();
+    if (tags.indexOf(ARTIST_TAG) === -1) tags.push(ARTIST_TAG);
+    return Object.assign({}, c, {
+      tags: tags,
+      source: ARTIST_SOURCE,
+      business: site.url || c.business
+    });
+  });
+
+  refreshContactsList();
+  autosaveContent();
+  autosaveContacts();
+  toast('Updated ' + updated + ' linked contact' + (updated === 1 ? '' : 's') + ' ✓', 'success');
 }
 
 // ── EMAIL INBOX ────────────────────────────────────────────────────────────────
