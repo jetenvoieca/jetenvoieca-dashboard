@@ -88,8 +88,8 @@ button,input,textarea,select{font-family:'Jost',sans-serif;font-size:13px;font-w
 
 /* Form actions */
 .form-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
-.btn-save{padding:9px 22px;background:var(--noir);color:white;border:none;border-radius:4px;font-size:12px;letter-spacing:.06em;cursor:pointer}
-.btn-save:hover{background:var(--gold)}
+.btn-save{padding:9px 22px;background:transparent;color:var(--noir);border:.5px solid var(--border);border-radius:4px;font-size:12px;letter-spacing:.06em;cursor:pointer}
+.btn-save:hover{border-color:var(--noir)}
 .btn-cancel{padding:9px 16px;border:.5px solid var(--border);background:transparent;border-radius:4px;font-size:12px;color:var(--muted);cursor:pointer}
 
 /* Toast */
@@ -1467,20 +1467,40 @@ function renderContactsRows(contacts) {
     return '<p style="color:var(--muted);font-size:13px;text-align:center;margin-top:40px">No contacts yet</p>';
   }
   var header = '<div style="display:flex;gap:10px;padding:6px 0;border-bottom:.5px solid var(--border);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)">' +
-    '<div style="flex:1">First Name</div><div style="flex:1">Surname</div><div style="flex:1.2">Business</div><div style="flex:1.4">Email</div></div>';
+    '<div style="flex:1">First Name</div><div style="flex:1">Surname</div><div style="flex:1.4">Business</div></div>';
   var rows = contacts.map(function(c) {
-    var editing = editingContactId === c.id;
+    var open = expandedContactId === c.id;
     var row = '<div onclick="selectContact(\'' + c.id + '\')" style="display:flex;gap:10px;align-items:center;padding:10px 0;cursor:pointer;' +
-      (editing ? 'background:var(--ivory);margin:0 -8px;padding-left:8px;padding-right:8px;border-radius:4px 4px 0 0' : 'border-bottom:.5px solid var(--border)') + '">' +
+      (open
+        ? 'background:var(--ivory);margin:0 -8px;padding-left:8px;padding-right:8px;border-radius:4px 4px 0 0'
+        : 'border-bottom:.5px solid var(--border)') + '">' +
       '<div style="flex:1;font-size:13px">' + (esc(c.firstName) || '—') + '</div>' +
       '<div style="flex:1;font-size:13px">' + (esc(c.lastName) || '—') + '</div>' +
-      '<div style="flex:1.2;font-size:13px;color:var(--muted)">' + (esc(c.business) || '—') + '</div>' +
-      '<div style="flex:1.4;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (esc(c.email) || '—') + '</div>' +
+      '<div style="flex:1.4;font-size:13px;color:var(--muted)">' + (esc(c.business) || '—') + '</div>' +
       '</div>';
-    var panel = editing ? renderContactEditForm(c) : '';
+    var panel = '';
+    if (editingContactId === c.id) panel = renderContactEditForm(c);
+    else if (open) panel = renderContactDetail(c);
     return row + panel;
   }).join('');
   return header + rows;
+}
+
+// Read-only detail panel — clean summary of a contact. Edit is the further
+// step into the actual edit form, same pattern as Sites.
+function renderContactDetail(c) {
+  var linkedSite = findLinkedSite(c.id);
+  return '<div onclick="event.stopPropagation()" style="margin:0 -8px;padding:10px 8px 12px;background:var(--ivory);border-radius:0 0 4px 4px;border-bottom:.5px solid var(--border)">' +
+    (linkedSite ? '<div style="font-size:11px;color:var(--muted);margin-bottom:10px">🔗 Linked to site: ' + esc(linkedSite.name) + '</div>' : '') +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:12px;margin-bottom:10px">' +
+    '<div><div style="color:var(--muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px">Email</div>' + (esc(c.email) || '—') + '</div>' +
+    '<div><div style="color:var(--muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px">Source</div>' + (esc(c.source) || '—') + '</div>' +
+    '<div style="grid-column:1 / -1"><div style="color:var(--muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px">Tags</div>' + ((c.tags||[]).length ? esc(c.tags.join(', ')) : '—') + '</div>' +
+    '</div>' +
+    '<div style="display:flex;align-items:center;justify-content:space-between">' +
+    '<button class="btn-cancel" onclick="startEditContact(\'' + c.id + '\')">Edit</button>' +
+    '<button onclick="selectContact(\'' + c.id + '\')" title="Close" style="background:none;border:none;color:var(--muted);font-size:16px;line-height:1;cursor:pointer;padding:4px 6px">×</button>' +
+    '</div></div>';
 }
 
 function renderContactEditForm(c) {
@@ -1522,16 +1542,22 @@ function refreshContactsHeader() {
   if (subEl) subEl.textContent = n + ' contact' + (n === 1 ? '' : 's');
 }
 
-// Clicking a row opens straight into edit — the row itself already shows the
-// four list columns, so there's no separate read-only step needed here.
+// Clicking a row opens the read-only detail panel. Clicking the same row (or
+// its × ) again collapses it. Edit inside that panel is the further step.
 function selectContact(id) {
-  if (editingContactId === id) {
-    editingContactId = null;
+  if (expandedContactId === id) {
     expandedContactId = null;
+    editingContactId = null;
   } else {
-    editingContactId = id;
     expandedContactId = id;
+    editingContactId = null;
   }
+  refreshContactsList();
+}
+
+function startEditContact(id) {
+  editingContactId = id;
+  expandedContactId = id;
   refreshContactsList();
 }
 
@@ -1662,9 +1688,31 @@ function importContactsFromSites() {
 // One-off catch-up for contacts imported before the Artist tag/source/business
 // defaults existed — brings any already-linked contact into line, safe to
 // run again any time (it's idempotent).
+// Collapses any "Artist"/"Artists"/etc. duplicate tag variants — in the
+// settings list and on every contact — down to one canonical ARTIST_TAG.
+function normalizeArtistTag() {
+  var cs = getContactSettings();
+  var isVariant = function(t) { return /^artists?$/i.test(t); };
+
+  if (cs.tags.some(isVariant)) {
+    cs.tags = cs.tags.filter(function(t) { return !isVariant(t); });
+    cs.tags.push(ARTIST_TAG);
+  }
+
+  state.contacts = (state.contacts || []).map(function(c) {
+    var tags = c.tags || [];
+    if (!tags.some(isVariant)) return c;
+    var cleaned = tags.filter(function(t) { return !isVariant(t); });
+    cleaned.push(ARTIST_TAG);
+    cleaned = cleaned.filter(function(t, i) { return cleaned.indexOf(t) === i; }); // de-dup
+    return Object.assign({}, c, { tags: cleaned });
+  });
+}
+
 function fillArtistDefaults() {
   ensureContactSetting('tags', ARTIST_TAG);
   ensureContactSetting('sources', ARTIST_SOURCE);
+  normalizeArtistTag();
 
   var updated = 0;
   state.contacts = (state.contacts || []).map(function(c) {
