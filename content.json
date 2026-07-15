@@ -81,5 +81,9 @@
     "tags": [
       "Artists"
     ]
+  },
+  "financial": {
+    "vatRate": "20",
+    "urssafRate": ""
   }
 }
