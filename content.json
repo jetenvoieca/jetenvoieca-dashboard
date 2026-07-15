@@ -73,5 +73,11 @@
       "kind": "custom",
       "inMenu": true
     }
-  ]
+  ],
+  "contactSettings": {
+    "sources": [],
+    "tags": [
+      "Artist"
+    ]
+  }
 }
