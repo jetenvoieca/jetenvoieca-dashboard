@@ -1,4 +1,5 @@
 const https = require('https');
+const { requireAuth } = require('./_auth');
 
 function githubRequest(method, path, token, body) {
   return new Promise((resolve, reject) => {
@@ -30,6 +31,10 @@ function githubRequest(method, path, token, body) {
 }
 
 exports.handler = async function (event) {
+  if (!requireAuth(event)) {
+    return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) };
+  }
+
   const token = process.env.GITHUB_TOKEN;
   const repo = process.env.GITHUB_REPO;       // e.g. "jetenvoieca/jetenvoieca-dashboard" — set in Netlify, never sent by the client
   const branch = process.env.GITHUB_BRANCH || 'main';
