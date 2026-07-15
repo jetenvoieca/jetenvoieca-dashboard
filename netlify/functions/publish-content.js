@@ -63,7 +63,8 @@ exports.handler = async function (event) {
   const ALLOWED_TARGETS = {
     content: 'content.json',
     sites: 'sites.json',
-    domains: 'domains.json'
+    domains: 'domains.json',
+    contacts: 'contacts.json'
   };
   const target = body.target || 'content';
   const filename = ALLOWED_TARGETS[target];
