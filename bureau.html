@@ -195,13 +195,7 @@ button,input,textarea,select{font-family:'Jost',sans-serif;font-size:13px;font-w
           Contacts <span class="chev">▼</span>
         </button>
         <div class="acc-body" id="acc-body-contacts">
-          <div class="acc-items">
-            <button class="acc-item" onclick="showView('contacts-all')">All Contacts</button>
-            <button class="acc-item" onclick="showView('contacts-mailings')">E-Mailings</button>
-            <button class="acc-item" onclick="showView('contacts-press')">Press Releases</button>
-            <button class="acc-item" onclick="showView('contacts-support')">Support</button>
-            <button class="acc-item" onclick="showView('contacts-settings')">Contact Settings</button>
-          </div>
+          <div class="acc-items" id="acc-items-contacts"></div>
         </div>
       </div>
 
@@ -264,6 +258,7 @@ async function loadAllFromGitHub(silent) {
 
   state.loaded = true;
   renderPagesNav();
+  renderContactsNav();
   if (state.currentView) showView(state.currentView);
   if (!silent) {
     if (contentOk) toast('Loaded from GitHub ✓', 'success');
@@ -635,6 +630,7 @@ function showView(view) {
   else if (view === 'financial-accounts') pane.innerHTML = viewFinancialAccounts();
   else if (view === 'financial-settings') pane.innerHTML = viewFinancialSettings();
   else if (view === 'contacts-all') pane.innerHTML = viewAllContacts();
+  else if (view.indexOf('contacts-tag:') === 0) pane.innerHTML = viewContactsByTag(view.slice('contacts-tag:'.length));
   else if (view === 'contacts-settings') pane.innerHTML = viewContactSettings();
   else if (view === 'contacts-mailings') pane.innerHTML = viewComingSoon('E-Mailings');
   else if (view === 'contacts-press') pane.innerHTML = viewComingSoon('Press Releases');
@@ -1438,6 +1434,7 @@ function removeChip(kind, idx) {
 function refreshContactSettings() {
   var pane = document.getElementById('edit-pane');
   if (pane) pane.innerHTML = viewContactSettings();
+  renderContactsNav();
 }
 
 // ── ALL CONTACTS ───────────────────────────────────────────────────────────────
@@ -1448,8 +1445,17 @@ function findContact(id) {
   return (state.contacts || []).find(function(c) { return c.id === id; });
 }
 
-function viewAllContacts() {
+var contactsFilterTag = null; // null = All Contacts view, otherwise showing just one tag
+
+function getFilteredContacts() {
   var contacts = state.contacts || [];
+  if (!contactsFilterTag) return contacts;
+  return contacts.filter(function(c) { return (c.tags || []).indexOf(contactsFilterTag) > -1; });
+}
+
+function viewAllContacts() {
+  contactsFilterTag = null;
+  var contacts = getFilteredContacts();
   return '<div class="edit-inner">' +
     '<div class="sticky-hd" style="display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap">' +
     '<div><div class="edit-title">All Contacts</div><div class="edit-sub">' + contacts.length + ' contact' + (contacts.length === 1 ? '' : 's') + '</div></div>' +
@@ -1458,6 +1464,18 @@ function viewAllContacts() {
     '<button class="btn-cancel" onclick="fillArtistDefaults()">Fill Artist Defaults</button>' +
     '<button class="btn-cancel" onclick="startAddContact()">Add Contact</button>' +
     '</div></div>' +
+    '<div id="contacts-list">' + renderContactsRows(contacts) + '</div>' +
+    '</div>';
+}
+
+function viewContactsByTag(tag) {
+  contactsFilterTag = tag;
+  var contacts = getFilteredContacts();
+  return '<div class="edit-inner">' +
+    '<div class="sticky-hd" style="display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap">' +
+    '<div><div class="edit-title">' + esc(tag) + '</div><div class="edit-sub">' + contacts.length + ' contact' + (contacts.length === 1 ? '' : 's') + '</div></div>' +
+    '<button class="btn-cancel" onclick="startAddContact()">Add Contact</button>' +
+    '</div>' +
     '<div id="contacts-list">' + renderContactsRows(contacts) + '</div>' +
     '</div>';
 }
@@ -1683,12 +1701,12 @@ function renderContactEditForm(c) {
 
 function refreshContactsList() {
   var container = document.getElementById('contacts-list');
-  if (container) container.innerHTML = renderContactsRows(state.contacts || []);
+  if (container) container.innerHTML = renderContactsRows(getFilteredContacts());
 }
 
 function refreshContactsHeader() {
   var subEl = document.querySelector('#edit-pane .edit-sub');
-  var n = (state.contacts || []).length;
+  var n = getFilteredContacts().length;
   if (subEl) subEl.textContent = n + ' contact' + (n === 1 ? '' : 's');
 }
 
@@ -1767,7 +1785,8 @@ function deleteContactInline(id) {
 
 function startAddContact() {
   var id = String(Date.now());
-  var c = { id: id, firstName: '', lastName: '', business: '', email: '', source: '', tags: [] };
+  var initialTags = contactsFilterTag ? [contactsFilterTag] : [];
+  var c = { id: id, firstName: '', lastName: '', business: '', email: '', source: '', tags: initialTags };
   state.contacts = state.contacts || [];
   state.contacts.unshift(c);
   editingContactId = id;
@@ -1829,6 +1848,7 @@ function importContactsFromSites() {
 
   refreshContactsList();
   refreshContactsHeader();
+  renderContactsNav();
   autosaveContent();
   autosaveContacts();
   autosaveSites();
@@ -1879,6 +1899,7 @@ function fillArtistDefaults() {
   });
 
   refreshContactsList();
+  renderContactsNav();
   autosaveContent();
   autosaveContacts();
   toast('Updated ' + updated + ' linked contact' + (updated === 1 ? '' : 's') + ' ✓', 'success');
@@ -2184,6 +2205,24 @@ function renderPagesNav() {
   setActiveNav(state.currentView);
 }
 
+// One sidebar item per tag, generated from Contact Settings — so adding a
+// tag there automatically gives it its own filtered view here.
+function renderContactsNav() {
+  var container = document.getElementById('acc-items-contacts');
+  if (!container) return;
+  var cs = getContactSettings();
+  var html = '<button class="acc-item" onclick="showView(\'contacts-all\')">All Contacts</button>';
+  cs.tags.forEach(function(t) {
+    html += '<button class="acc-item" onclick="showView(\'contacts-tag:' + esc(t).replace(/'/g, '') + '\')">' + esc(t) + '</button>';
+  });
+  html += '<button class="acc-item" onclick="showView(\'contacts-mailings\')">E-Mailings</button>';
+  html += '<button class="acc-item" onclick="showView(\'contacts-press\')">Press Releases</button>';
+  html += '<button class="acc-item" onclick="showView(\'contacts-support\')">Support</button>';
+  html += '<button class="acc-item" onclick="showView(\'contacts-settings\')">Contact Settings</button>';
+  container.innerHTML = html;
+  setActiveNav(state.currentView);
+}
+
 var navDragFromIndex = null;
 
 function navDragStart(e, idx) {
@@ -2426,6 +2465,7 @@ function logout() {
 
 function initBureau() {
   renderPagesNav();
+  renderContactsNav();
   loadAllFromGitHub(true);
 }
 
