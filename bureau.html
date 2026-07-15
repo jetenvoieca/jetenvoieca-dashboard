@@ -1497,10 +1497,160 @@ function renderContactDetail(c) {
     '<div><div style="color:var(--muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px">Source</div>' + (esc(c.source) || '—') + '</div>' +
     '<div style="grid-column:1 / -1"><div style="color:var(--muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px">Tags</div>' + ((c.tags||[]).length ? esc(c.tags.join(', ')) : '—') + '</div>' +
     '</div>' +
-    '<div style="display:flex;align-items:center;justify-content:space-between">' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">' +
     '<button class="btn-cancel" onclick="startEditContact(\'' + c.id + '\')">Edit</button>' +
     '<button onclick="selectContact(\'' + c.id + '\')" title="Close" style="background:none;border:none;color:var(--muted);font-size:16px;line-height:1;cursor:pointer;padding:4px 6px">×</button>' +
+    '</div>' +
+    (c.email ? renderContactEmailBlock(c) : '') +
+    '</div>';
+}
+
+// ── Email history within a contact's panel ────────────────────────────────────
+var contactEmailCache = {};    // contactId -> messages array
+var contactEmailLoading = {};  // contactId -> bool
+var contactComposing = {};     // contactId -> bool
+var expandedContactEmailKey = null; // "mailbox:uid" of the open message, one at a time
+var contactEmailBodyCache = {};     // "mailbox:uid" -> body
+
+function renderContactEmailBlock(c) {
+  return '<div style="padding-top:14px;border-top:.5px solid var(--border)">' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">' +
+    '<div style="font-size:10px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase">Email History</div>' +
+    '<button class="btn-cancel" onclick="startContactCompose(\'' + c.id + '\')" style="padding:5px 12px;font-size:10px">Send Email</button>' +
+    '</div>' +
+    '<div id="contact-emails-' + c.id + '">' + renderContactEmailSection(c) + '</div>' +
+    '</div>';
+}
+
+function renderContactEmailSection(c) {
+  var id = c.id;
+  var html = contactComposing[id] ? renderContactComposeForm(c) : '';
+
+  if (contactEmailLoading[id]) {
+    return html + '<p style="font-size:12px;color:var(--muted)">Loading…</p>';
+  }
+  var messages = contactEmailCache[id];
+  if (!messages) {
+    loadContactEmails(id); // kicks off async fetch, re-renders when done
+    return html + '<p style="font-size:12px;color:var(--muted)">Loading…</p>';
+  }
+  if (messages.length === 0) {
+    return html + '<p style="font-size:12px;color:var(--muted)">No emails found with this address</p>';
+  }
+
+  html += messages.map(function(m) {
+    var key = m.mailbox + ':' + m.uid;
+    var open = expandedContactEmailKey === key;
+    var row = '<div onclick="toggleContactEmail(\'' + id + '\',\'' + esc(m.mailbox).replace(/'/g,"") + '\',' + m.uid + ')" style="display:flex;align-items:center;gap:8px;padding:8px 0;cursor:pointer;' +
+      (open ? 'background:white;margin:0 -6px;padding-left:6px;padding-right:6px;border-radius:4px 4px 0 0' : 'border-bottom:.5px solid var(--border)') + '">' +
+      '<span style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;flex-shrink:0;width:52px">' + (m.direction === 'sent' ? 'Sent' : 'Received') + '</span>' +
+      '<div style="flex:1;min-width:0;font-size:12px;color:var(--noir);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(m.subject) + '</div>' +
+      '<div style="font-size:10px;color:var(--muted);flex-shrink:0">' + formatEmailDate(m.date) + '</div>' +
+      '</div>';
+    var detail = open ? renderContactEmailDetail(m) : '';
+    return row + detail;
+  }).join('');
+  return html;
+}
+
+function refreshContactEmailSection(contactId) {
+  var el = document.getElementById('contact-emails-' + contactId);
+  if (el) el.innerHTML = renderContactEmailSection(findContact(contactId));
+}
+
+async function loadContactEmails(contactId) {
+  var c = findContact(contactId);
+  if (!c || !c.email) return;
+  contactEmailLoading[contactId] = true;
+  try {
+    var res = await authFetch('/.netlify/functions/email-inbox?contactEmail=' + encodeURIComponent(c.email));
+    var json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Failed to load emails');
+    contactEmailCache[contactId] = json.messages || [];
+  } catch (err) {
+    contactEmailCache[contactId] = [];
+    toast('Could not load emails: ' + err.message, 'error');
+  }
+  contactEmailLoading[contactId] = false;
+  refreshContactEmailSection(contactId);
+}
+
+function toggleContactEmail(contactId, mailbox, uid) {
+  var key = mailbox + ':' + uid;
+  expandedContactEmailKey = (expandedContactEmailKey === key) ? null : key;
+  refreshContactEmailSection(contactId);
+}
+
+function renderContactEmailDetail(m) {
+  var key = m.mailbox + ':' + m.uid;
+  var cached = contactEmailBodyCache[key];
+  if (!cached) {
+    loadContactEmailBody(m);
+    return '<div onclick="event.stopPropagation()" style="padding:10px 6px;background:white;border-bottom:.5px solid var(--border)">' +
+      '<p style="font-size:11px;color:var(--muted)">Loading…</p></div>';
+  }
+  var bodyText = cached.text || stripHtmlTags(cached.html) || '(empty message)';
+  return '<div onclick="event.stopPropagation()" style="padding:10px 6px 12px;background:white;border-bottom:.5px solid var(--border)">' +
+    '<div style="font-size:10px;color:var(--muted);margin-bottom:8px">' + (m.direction === 'sent' ? 'To ' + esc(m.to) : 'From ' + esc(m.from)) + '</div>' +
+    '<div style="font-size:12px;line-height:1.65;white-space:pre-wrap">' + esc(bodyText) + '</div>' +
+    '</div>';
+}
+
+async function loadContactEmailBody(m) {
+  var key = m.mailbox + ':' + m.uid;
+  try {
+    var res = await authFetch('/.netlify/functions/email-inbox?uid=' + m.uid + '&mailbox=' + encodeURIComponent(m.mailbox));
+    var json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Failed to load message');
+    contactEmailBodyCache[key] = json;
+  } catch (err) {
+    contactEmailBodyCache[key] = { text: 'Could not load this message: ' + err.message };
+  }
+  if (expandedContactEmailKey === key) refreshContactsList();
+}
+
+function startContactCompose(contactId) {
+  contactComposing[contactId] = true;
+  refreshContactEmailSection(contactId);
+}
+
+function cancelContactCompose(contactId) {
+  contactComposing[contactId] = false;
+  refreshContactEmailSection(contactId);
+}
+
+function renderContactComposeForm(c) {
+  var id = c.id;
+  return '<div onclick="event.stopPropagation()" style="padding:12px;background:white;border-radius:4px;margin-bottom:12px;border:.5px solid var(--border)">' +
+    '<div class="field"><label>To</label><input id="cc-to-' + id + '" value="' + esc(c.email || '') + '"></div>' +
+    '<div class="field"><label>Subject</label><input id="cc-subject-' + id + '"></div>' +
+    '<div class="field"><label>Message</label><textarea id="cc-body-' + id + '" rows="6"></textarea></div>' +
+    '<div class="form-actions">' +
+    '<button class="btn-cancel" onclick="cancelContactCompose(\'' + id + '\')">Cancel</button>' +
+    '<button class="btn-save" onclick="sendContactCompose(\'' + id + '\')">Send</button>' +
     '</div></div>';
+}
+
+async function sendContactCompose(contactId) {
+  var to = val('cc-to-' + contactId).trim();
+  var subject = val('cc-subject-' + contactId).trim();
+  var text = val('cc-body-' + contactId).trim();
+  if (!to || !text) { toast('To and message are required', 'error'); return; }
+  try {
+    var res = await authFetch('/.netlify/functions/email-send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: to, subject: subject, text: text })
+    });
+    var json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Send failed');
+    toast('Sent ✓', 'success');
+    contactComposing[contactId] = false;
+    delete contactEmailCache[contactId]; // force a refresh so the new sent message shows up
+    refreshContactEmailSection(contactId);
+  } catch (err) {
+    toast('Send failed: ' + err.message, 'error');
+  }
 }
 
 function renderContactEditForm(c) {
