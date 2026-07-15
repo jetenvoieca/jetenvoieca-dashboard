@@ -51,7 +51,7 @@ button,input,textarea,select{font-family:'Jost',sans-serif;font-size:13px;font-w
 .acc-hd{width:100%;padding:9px 12px;border:none;border-radius:5px;font-family:'Jost',sans-serif;font-size:11px;font-weight:500;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;display:flex;align-items:center;justify-content:space-between;transition:background .2s,color .2s;background:transparent;color:rgba(255,255,255,.45)}
 .acc-hd:hover{background:rgba(255,255,255,.05);color:rgba(255,255,255,.8)}
 .acc-hd.open{background:rgba(255,255,255,.07);color:#fff}
-.acc-hd .chev{font-size:9px;transition:transform .25s;opacity:.5}
+.acc-hd .chev{font-size:7px;transition:transform .25s;opacity:.5}
 .acc-hd.open .chev{transform:rotate(180deg);opacity:1}
 .acc-body{overflow:hidden;max-height:0;transition:max-height .3s ease}
 .acc-body.open{max-height:600px}
@@ -143,10 +143,10 @@ button,input,textarea,select{font-family:'Jost',sans-serif;font-size:13px;font-w
 
       <div class="nav-divider"></div>
 
-      <!-- PAGES -->
+      <!-- WEBSITE -->
       <div class="acc-group">
         <button class="acc-hd open" id="acc-pages" onclick="toggleAcc('pages')">
-          Pages <span class="chev">▼</span>
+          Website <span class="chev">▼</span>
         </button>
         <div class="acc-body open" id="acc-body-pages">
           <div class="acc-items" id="acc-items-pages"></div>
@@ -155,27 +155,32 @@ button,input,textarea,select{font-family:'Jost',sans-serif;font-size:13px;font-w
 
       <div class="nav-divider"></div>
 
-      <!-- SITES -->
+      <!-- MANAGEMENT -->
       <div class="acc-group">
-        <button class="acc-hd" id="acc-sites" onclick="toggleAcc('sites')">
-          Sites <span class="chev">▼</span>
+        <button class="acc-hd" id="acc-management" onclick="toggleAcc('management')">
+          Management <span class="chev">▼</span>
         </button>
-        <div class="acc-body" id="acc-body-sites">
+        <div class="acc-body" id="acc-body-management">
           <div class="acc-items">
             <button class="acc-item" onclick="showView('sites-dashboard')">All Sites</button>
+            <button class="acc-item" onclick="showView('domains-unassigned')">Unassigned Domains</button>
+            <button class="acc-item" onclick="showView('domains-all')">All Domains</button>
           </div>
         </div>
       </div>
 
-      <!-- DOMAINS -->
+      <!-- CONTACTS -->
       <div class="acc-group">
-        <button class="acc-hd" id="acc-domains" onclick="toggleAcc('domains')">
-          Domains <span class="chev">▼</span>
+        <button class="acc-hd" id="acc-contacts" onclick="toggleAcc('contacts')">
+          Contacts <span class="chev">▼</span>
         </button>
-        <div class="acc-body" id="acc-body-domains">
+        <div class="acc-body" id="acc-body-contacts">
           <div class="acc-items">
-            <button class="acc-item" onclick="showView('domains-unassigned')">Unassigned</button>
-            <button class="acc-item" onclick="showView('domains-all')">All Domains</button>
+            <button class="acc-item" onclick="showView('contacts-all')">All Contacts</button>
+            <button class="acc-item" onclick="showView('contacts-mailings')">E-Mailings</button>
+            <button class="acc-item" onclick="showView('contacts-press')">Press Releases</button>
+            <button class="acc-item" onclick="showView('contacts-support')">Support</button>
+            <button class="acc-item" onclick="showView('contacts-settings')">Contact Settings</button>
           </div>
         </div>
       </div>
@@ -196,6 +201,7 @@ button,input,textarea,select{font-family:'Jost',sans-serif;font-size:13px;font-w
     </div>
   </div>
 
+
 </div>
 
 <div class="toast" id="toast"></div>
@@ -207,12 +213,13 @@ var state = {
   content: {},   // content.json — home/story/contact/settings
   sites: [],     // sites.json
   domains: null, // domains.json
+  contacts: [],  // contacts.json
   loaded: false
 };
 
 // GitHub is the only source of truth — no local storage. On load, pull the
-// three published files into memory. Everything Bureau reads and displays
-// comes from these in-memory copies, kept in sync by autosave below.
+// published files into memory. Everything Bureau reads and displays comes
+// from these in-memory copies, kept in sync by autosave below.
 async function loadAllFromGitHub(silent) {
   var contentOk = false;
   try {
@@ -229,6 +236,11 @@ async function loadAllFromGitHub(silent) {
     var domainsRes = await fetch('domains.json', { cache: 'no-store' });
     state.domains = domainsRes.ok ? await domainsRes.json() : null;
   } catch (err) { state.domains = null; }
+
+  try {
+    var contactsRes = await fetch('contacts.json', { cache: 'no-store' });
+    state.contacts = contactsRes.ok ? await contactsRes.json() : [];
+  } catch (err) { state.contacts = []; }
 
   state.loaded = true;
   renderPagesNav();
@@ -286,6 +298,17 @@ var autosaveSites = debounce(async function() {
   }
 }, 1500);
 
+var autosaveContacts = debounce(async function() {
+  try {
+    await publishFile('contacts', JSON.stringify(state.contacts, null, 2), 'Autosave contacts.json via Bureau');
+    state.pendingAutosave = false;
+    setAutosaveStatus('saved');
+  } catch (err) {
+    setAutosaveStatus('error');
+    toast('Autosave failed: ' + err.message, 'error');
+  }
+}, 1500);
+
 // Domains change via discrete actions (import/sync), not typing, so this
 // writes immediately rather than debouncing.
 async function autosaveDomainsNow() {
@@ -309,6 +332,7 @@ async function publish() {
   try {
     await publishFile('content', JSON.stringify(state.content, null, 2), 'Update content.json via Bureau');
     await publishFile('sites', JSON.stringify(state.sites, null, 2), 'Update sites.json via Bureau');
+    await publishFile('contacts', JSON.stringify(state.contacts, null, 2), 'Update contacts.json via Bureau');
     if (state.domains) {
       await publishFile('domains', JSON.stringify(state.domains, null, 2), 'Update domains.json via Bureau');
     }
@@ -345,8 +369,15 @@ function toast(msg, type) {
 function toggleAcc(id) {
   var hd = document.getElementById('acc-' + id);
   var body = document.getElementById('acc-body-' + id);
-  hd.classList.toggle('open');
-  body.classList.toggle('open');
+  var opening = !hd.classList.contains('open');
+
+  document.querySelectorAll('.acc-hd').forEach(function(h) { h.classList.remove('open'); });
+  document.querySelectorAll('.acc-body').forEach(function(b) { b.classList.remove('open'); });
+
+  if (opening) {
+    hd.classList.add('open');
+    body.classList.add('open');
+  }
 }
 
 // ── PREVIEW ──────────────────────────────────────────────────────────────────
@@ -583,6 +614,11 @@ function showView(view) {
   else if (view === 'settings-site') { pane.innerHTML = viewSiteSettings(); setPreview('site', 'index.html'); }
   else if (view === 'financial-accounts') pane.innerHTML = viewFinancialAccounts();
   else if (view === 'financial-settings') pane.innerHTML = viewFinancialSettings();
+  else if (view === 'contacts-all') pane.innerHTML = viewAllContacts();
+  else if (view === 'contacts-settings') pane.innerHTML = viewContactSettings();
+  else if (view === 'contacts-mailings') pane.innerHTML = viewComingSoon('E-Mailings');
+  else if (view === 'contacts-press') pane.innerHTML = viewComingSoon('Press Releases');
+  else if (view === 'contacts-support') pane.innerHTML = viewComingSoon('Support');
   else if (view.indexOf('page:') === 0) {
     var pgId = view.slice(5);
     pane.innerHTML = viewSingleCustomPage(pgId);
@@ -1251,6 +1287,227 @@ function onFinancialSettingsFieldChange() {
     vatRate: val('fs-vat'), urssafRate: val('fs-urssaf')
   };
   autosaveContent();
+}
+
+function viewComingSoon(title) {
+  return '<div class="edit-inner"><div class="sticky-hd"><div class="edit-title">' + esc(title) + '</div><div class="edit-sub">Coming soon</div></div>' +
+    '<p style="color:var(--muted);font-size:13px;text-align:center;margin-top:40px">Not built yet</p></div>';
+}
+
+// ── CONTACT SETTINGS (sources + tags) ─────────────────────────────────────────
+function getContactSettings() {
+  if (!state.content.contactSettings) {
+    state.content.contactSettings = { sources: [], tags: [] };
+  }
+  if (!state.content.contactSettings.sources) state.content.contactSettings.sources = [];
+  if (!state.content.contactSettings.tags) state.content.contactSettings.tags = [];
+  return state.content.contactSettings;
+}
+
+function viewContactSettings() {
+  var cs = getContactSettings();
+  return '<div class="edit-inner">' +
+    '<div class="sticky-hd"><div class="edit-title">Contact Settings</div><div class="edit-sub">Manage the sources and tags used across all contacts.</div></div>' +
+    '<div class="card">' +
+    '<div class="card-title" style="color:var(--gold);text-transform:uppercase;letter-spacing:.08em;font-size:11px">Sale Sources</div>' +
+    '<div id="cs-sources-list" style="margin-top:10px">' + renderChipList(cs.sources, 'sources') + '</div>' +
+    '<div style="display:flex;gap:8px;margin-top:6px">' +
+    '<input id="cs-new-source" placeholder="New source…" onkeydown="if(event.key===\'Enter\'){addSource();}" style="flex:1;padding:9px 12px;border:.5px solid var(--border);border-radius:4px;font-family:inherit;font-size:13px;outline:none">' +
+    '<button class="btn-save" onclick="addSource()">Add</button>' +
+    '</div></div>' +
+    '<div class="card">' +
+    '<div class="card-title" style="color:var(--gold);text-transform:uppercase;letter-spacing:.08em;font-size:11px">Tags</div>' +
+    '<div class="field-hint" style="margin-bottom:10px">Each becomes its own shortcut under Contacts.</div>' +
+    '<div id="cs-tags-list">' + renderChipList(cs.tags, 'tags') + '</div>' +
+    '<div style="display:flex;gap:8px;margin-top:6px">' +
+    '<input id="cs-new-tag" placeholder="New tag…" onkeydown="if(event.key===\'Enter\'){addTag();}" style="flex:1;padding:9px 12px;border:.5px solid var(--border);border-radius:4px;font-family:inherit;font-size:13px;outline:none">' +
+    '<button class="btn-save" onclick="addTag()">Add</button>' +
+    '</div></div>' +
+    '</div>';
+}
+
+function renderChipList(items, kind) {
+  if (!items.length) return '<p style="font-size:12px;color:var(--muted)">None yet</p>';
+  return items.map(function(item, idx) {
+    return '<div style="display:flex;align-items:center;justify-content:space-between;background:white;border:.5px solid var(--border);border-radius:6px;padding:10px 14px;margin-bottom:8px">' +
+      '<span style="font-size:13px">' + esc(item) + '</span>' +
+      '<button onclick="removeChip(\'' + kind + '\',' + idx + ')" style="background:none;border:none;color:var(--muted);font-size:15px;cursor:pointer;padding:2px 6px;line-height:1">×</button>' +
+      '</div>';
+  }).join('');
+}
+
+function addSource() {
+  var v = val('cs-new-source').trim();
+  if (!v) return;
+  var cs = getContactSettings();
+  if (cs.sources.indexOf(v) === -1) cs.sources.push(v);
+  refreshContactSettings();
+  autosaveContent();
+}
+
+function addTag() {
+  var v = val('cs-new-tag').trim();
+  if (!v) return;
+  var cs = getContactSettings();
+  if (cs.tags.indexOf(v) === -1) cs.tags.push(v);
+  refreshContactSettings();
+  autosaveContent();
+}
+
+function removeChip(kind, idx) {
+  getContactSettings()[kind].splice(idx, 1);
+  refreshContactSettings();
+  autosaveContent();
+}
+
+function refreshContactSettings() {
+  var pane = document.getElementById('edit-pane');
+  if (pane) pane.innerHTML = viewContactSettings();
+}
+
+// ── ALL CONTACTS ───────────────────────────────────────────────────────────────
+var expandedContactId = null;
+var editingContactId = null;
+
+function findContact(id) {
+  return (state.contacts || []).find(function(c) { return c.id === id; });
+}
+
+function viewAllContacts() {
+  var contacts = state.contacts || [];
+  return '<div class="edit-inner">' +
+    '<div class="sticky-hd" style="display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap">' +
+    '<div><div class="edit-title">All Contacts</div><div class="edit-sub">' + contacts.length + ' contact' + (contacts.length === 1 ? '' : 's') + '</div></div>' +
+    '<button class="btn-cancel" onclick="startAddContact()">Add Contact</button>' +
+    '</div>' +
+    '<div id="contacts-list">' + renderContactsRows(contacts) + '</div>' +
+    '</div>';
+}
+
+function renderContactsRows(contacts) {
+  if (contacts.length === 0) {
+    return '<p style="color:var(--muted);font-size:13px;text-align:center;margin-top:40px">No contacts yet</p>';
+  }
+  var header = '<div style="display:flex;gap:10px;padding:6px 0;border-bottom:.5px solid var(--border);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)">' +
+    '<div style="flex:1">First Name</div><div style="flex:1">Surname</div><div style="flex:1.2">Business</div><div style="flex:1.4">Email</div></div>';
+  var rows = contacts.map(function(c) {
+    var editing = editingContactId === c.id;
+    var row = '<div onclick="selectContact(\'' + c.id + '\')" style="display:flex;gap:10px;align-items:center;padding:10px 0;cursor:pointer;' +
+      (editing ? 'background:var(--ivory);margin:0 -8px;padding-left:8px;padding-right:8px;border-radius:4px 4px 0 0' : 'border-bottom:.5px solid var(--border)') + '">' +
+      '<div style="flex:1;font-size:13px">' + (esc(c.firstName) || '—') + '</div>' +
+      '<div style="flex:1;font-size:13px">' + (esc(c.lastName) || '—') + '</div>' +
+      '<div style="flex:1.2;font-size:13px;color:var(--muted)">' + (esc(c.business) || '—') + '</div>' +
+      '<div style="flex:1.4;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (esc(c.email) || '—') + '</div>' +
+      '</div>';
+    var panel = editing ? renderContactEditForm(c) : '';
+    return row + panel;
+  }).join('');
+  return header + rows;
+}
+
+function renderContactEditForm(c) {
+  var id = c.id;
+  var cs = getContactSettings();
+  var sourceOptions = '<option value=""' + (!c.source ? ' selected' : '') + '>Select…</option>' +
+    cs.sources.map(function(s) { return '<option' + (c.source === s ? ' selected' : '') + '>' + esc(s) + '</option>'; }).join('');
+  var tagBoxes = cs.tags.map(function(t) {
+    var checked = (c.tags || []).indexOf(t) > -1;
+    return '<label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);margin:0 14px 8px 0;cursor:pointer">' +
+      '<input type="checkbox" data-tag="' + esc(t) + '" onchange="onContactRecordFieldChange(\'' + id + '\')" style="width:auto"' + (checked ? ' checked' : '') + '> ' + esc(t) + '</label>';
+  }).join('');
+
+  return '<div onclick="event.stopPropagation()" style="padding:16px 12px 18px;background:var(--ivory);border-radius:0 0 6px 6px;margin-bottom:2px">' +
+    '<div class="field-row">' +
+    '<div class="field"><label>First Name</label><input id="ct-first-' + id + '" oninput="onContactRecordFieldChange(\'' + id + '\')" value="' + esc(c.firstName) + '"></div>' +
+    '<div class="field"><label>Surname</label><input id="ct-last-' + id + '" oninput="onContactRecordFieldChange(\'' + id + '\')" value="' + esc(c.lastName) + '"></div>' +
+    '</div>' +
+    '<div class="field"><label>Business</label><input id="ct-business-' + id + '" oninput="onContactRecordFieldChange(\'' + id + '\')" value="' + esc(c.business||'') + '"></div>' +
+    '<div class="field"><label>Email</label><input id="ct-email-' + id + '" oninput="onContactRecordFieldChange(\'' + id + '\')" value="' + esc(c.email||'') + '"></div>' +
+    '<div class="field"><label>Source</label><select id="ct-source-' + id + '" onchange="onContactRecordFieldChange(\'' + id + '\')">' + sourceOptions + '</select></div>' +
+    '<div class="field"><label>Tags</label><div>' + (tagBoxes || '<span style="font-size:12px;color:var(--muted)">No tags yet — add some in Contact Settings</span>') + '</div></div>' +
+    '<div class="form-actions" style="margin-top:6px">' +
+    '<button class="btn-cancel" onclick="deleteContactInline(\'' + id + '\')">Delete</button>' +
+    '<button class="btn-save" onclick="closeContactForm(\'' + id + '\')">Done</button>' +
+    '</div></div>';
+}
+
+function refreshContactsList() {
+  var container = document.getElementById('contacts-list');
+  if (container) container.innerHTML = renderContactsRows(state.contacts || []);
+}
+
+function refreshContactsHeader() {
+  var subEl = document.querySelector('#edit-pane .edit-sub');
+  var n = (state.contacts || []).length;
+  if (subEl) subEl.textContent = n + ' contact' + (n === 1 ? '' : 's');
+}
+
+// Clicking a row opens straight into edit — the row itself already shows the
+// four list columns, so there's no separate read-only step needed here.
+function selectContact(id) {
+  if (editingContactId === id) {
+    editingContactId = null;
+    expandedContactId = null;
+  } else {
+    editingContactId = id;
+    expandedContactId = id;
+  }
+  refreshContactsList();
+}
+
+// Closing an untouched just-added contact quietly removes it, same pattern as Sites/Pages.
+function closeContactForm(id) {
+  var c = findContact(id);
+  if (c && !c.firstName && !c.lastName && !c.email) {
+    state.contacts = (state.contacts || []).filter(function(x) { return x.id !== id; });
+    autosaveContacts();
+  }
+  editingContactId = null;
+  expandedContactId = null;
+  refreshContactsList();
+  refreshContactsHeader();
+}
+
+function onContactRecordFieldChange(id) {
+  var tags = [];
+  document.querySelectorAll('#contacts-list input[type=checkbox][data-tag]').forEach(function(cb) {
+    if (cb.checked) tags.push(cb.getAttribute('data-tag'));
+  });
+  state.contacts = (state.contacts || []).map(function(c) {
+    if (c.id !== id) return c;
+    return Object.assign({}, c, {
+      firstName: val('ct-first-' + id),
+      lastName: val('ct-last-' + id),
+      business: val('ct-business-' + id),
+      email: val('ct-email-' + id),
+      source: val('ct-source-' + id),
+      tags: tags
+    });
+  });
+  refreshContactsHeader();
+  autosaveContacts();
+}
+
+function deleteContactInline(id) {
+  if (!confirm('Delete this contact?')) return;
+  state.contacts = (state.contacts || []).filter(function(c) { return c.id !== id; });
+  editingContactId = null;
+  expandedContactId = null;
+  toast('Contact deleted', 'success');
+  refreshContactsList();
+  refreshContactsHeader();
+  autosaveContacts();
+}
+
+function startAddContact() {
+  var id = String(Date.now());
+  var c = { id: id, firstName: '', lastName: '', business: '', email: '', source: '', tags: [] };
+  state.contacts = state.contacts || [];
+  state.contacts.unshift(c);
+  editingContactId = id;
+  expandedContactId = id;
+  refreshContactsList();
+  refreshContactsHeader();
 }
 
 // ── PAGES NAV (bespoke + custom, unified, draggable) ──────────────────────────
