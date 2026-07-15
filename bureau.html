@@ -897,8 +897,14 @@ function renderSiteDetail(s) {
 // record if it was a just-created, still-blank "Add Site" that was abandoned).
 function renderSiteEditForm(s) {
   var id = s.id;
+  var linkedContact = findLinkedContact(id);
   return '<div onclick="event.stopPropagation()" style="padding:16px 12px 18px;background:var(--ivory);border-radius:0 0 6px 6px;margin-bottom:2px">' +
-    '<div class="field"><label>Name</label><input id="se-name-' + id + '" oninput="onSiteFieldChange(\'' + id + '\')" value="' + esc(s.name) + '"></div>' +
+    (linkedContact ? '<div style="font-size:11px;color:var(--muted);margin-bottom:12px">🔗 Linked to contact: ' + esc((linkedContact.firstName + ' ' + linkedContact.lastName).trim()) + '</div>' : '') +
+    '<div class="field"><label>Website Name</label><input id="se-name-' + id + '" oninput="onSiteFieldChange(\'' + id + '\')" value="' + esc(s.name) + '"></div>' +
+    '<div class="field-row">' +
+    '<div class="field"><label>Artist First Name</label><input id="se-artist-first-' + id + '" oninput="onSiteFieldChange(\'' + id + '\')" value="' + esc(s.artistFirstName || '') + '"></div>' +
+    '<div class="field"><label>Artist Last Name</label><input id="se-artist-last-' + id + '" oninput="onSiteFieldChange(\'' + id + '\')" value="' + esc(s.artistLastName || '') + '"></div>' +
+    '</div>' +
     '<div class="field"><label>Email</label><input id="se-email-' + id + '" oninput="onSiteFieldChange(\'' + id + '\')" value="' + esc(s.email || '') + '"></div>' +
     '<div class="field"><label>URL</label><input id="se-url-' + id + '" oninput="onSiteFieldChange(\'' + id + '\')" value="' + esc(s.url) + '"></div>' +
     '<div class="field-row">' +
@@ -988,6 +994,8 @@ function onSiteFieldChange(id) {
     if (s.id !== id) return s;
     return Object.assign({}, s, {
       name: val('se-name-' + id).trim(),
+      artistFirstName: val('se-artist-first-' + id).trim(),
+      artistLastName: val('se-artist-last-' + id).trim(),
       email: val('se-email-' + id).trim(),
       url: url,
       sub_method: val('se-method-' + id),
@@ -997,6 +1005,51 @@ function onSiteFieldChange(id) {
     });
   });
   refreshSitesHeader();
+  syncSiteToContact(id);
+  autosaveSites();
+}
+
+// Site ↔ Contact sync — Artist First/Last Name and Email map directly onto
+// Contact fields with no lossy guessing, since Sites now store the name in
+// the same first/last shape Contacts use.
+function findLinkedContact(siteId) {
+  var site = state.sites.find(function(s) { return s.id === siteId; });
+  if (!site || !site.contactId) return null;
+  return findContact(site.contactId);
+}
+
+function findLinkedSite(contactId) {
+  return state.sites.find(function(s) { return s.contactId === contactId; });
+}
+
+function syncSiteToContact(siteId) {
+  var site = state.sites.find(function(s) { return s.id === siteId; });
+  if (!site || !site.contactId) return;
+  var contact = findContact(site.contactId);
+  if (!contact) return;
+  state.contacts = state.contacts.map(function(c) {
+    if (c.id !== contact.id) return c;
+    return Object.assign({}, c, {
+      firstName: site.artistFirstName || '',
+      lastName: site.artistLastName || '',
+      email: site.email || ''
+    });
+  });
+  autosaveContacts();
+}
+
+function syncContactToSite(contactId) {
+  var contact = findContact(contactId);
+  var site = findLinkedSite(contactId);
+  if (!contact || !site) return;
+  state.sites = state.sites.map(function(s) {
+    if (s.id !== site.id) return s;
+    return Object.assign({}, s, {
+      artistFirstName: contact.firstName || '',
+      artistLastName: contact.lastName || '',
+      email: contact.email || ''
+    });
+  });
   autosaveSites();
 }
 
@@ -1033,9 +1086,9 @@ function deleteSiteInline(id) {
 // only in memory until some separate Save click.
 function startAddSite() {
   var site = {
-    id: String(Date.now()), name: '', email: '', url: '',
+    id: String(Date.now()), name: '', artistFirstName: '', artistLastName: '', email: '', url: '',
     sub_method: '', sub_amount: '', notes: '', verified: false,
-    domain_owned: false, image: null
+    domain_owned: false, image: null, contactId: null
   };
   state.sites.unshift(site);
   editingSiteId = site.id;
@@ -1110,10 +1163,10 @@ function exportSitesCSV() {
   var sites = state.sites;
   if (sites.length === 0) { toast('No sites to export', 'error'); return; }
 
-  var headers = ['Name', 'Email', 'URL', 'Payment Method', 'Monthly Amount (£)', 'Domain Owned', 'Verified', 'Notes'];
+  var headers = ['Website Name', 'Artist First Name', 'Artist Last Name', 'Email', 'URL', 'Payment Method', 'Monthly Amount (£)', 'Domain Owned', 'Verified', 'Notes'];
   var rows = sites.map(function(s) {
     return [
-      s.name, s.email || '', s.url, s.sub_method || '', s.sub_amount || '',
+      s.name, s.artistFirstName || '', s.artistLastName || '', s.email || '', s.url, s.sub_method || '', s.sub_amount || '',
       s.domain_owned ? 'Yes' : 'No', s.verified ? 'Yes' : 'No', s.notes || ''
     ].map(function(v) { return '"' + String(v).replace(/"/g, '""') + '"'; });
   });
@@ -1399,8 +1452,10 @@ function viewAllContacts() {
   return '<div class="edit-inner">' +
     '<div class="sticky-hd" style="display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap">' +
     '<div><div class="edit-title">All Contacts</div><div class="edit-sub">' + contacts.length + ' contact' + (contacts.length === 1 ? '' : 's') + '</div></div>' +
+    '<div style="display:flex;gap:8px">' +
+    '<button class="btn-cancel" onclick="importContactsFromSites()">Import from Sites</button>' +
     '<button class="btn-cancel" onclick="startAddContact()">Add Contact</button>' +
-    '</div>' +
+    '</div></div>' +
     '<div id="contacts-list">' + renderContactsRows(contacts) + '</div>' +
     '</div>';
 }
@@ -1429,6 +1484,7 @@ function renderContactsRows(contacts) {
 function renderContactEditForm(c) {
   var id = c.id;
   var cs = getContactSettings();
+  var linkedSite = findLinkedSite(id);
   var sourceOptions = '<option value=""' + (!c.source ? ' selected' : '') + '>Select…</option>' +
     cs.sources.map(function(s) { return '<option' + (c.source === s ? ' selected' : '') + '>' + esc(s) + '</option>'; }).join('');
   var tagBoxes = cs.tags.map(function(t) {
@@ -1438,6 +1494,7 @@ function renderContactEditForm(c) {
   }).join('');
 
   return '<div onclick="event.stopPropagation()" style="padding:16px 12px 18px;background:var(--ivory);border-radius:0 0 6px 6px;margin-bottom:2px">' +
+    (linkedSite ? '<div style="font-size:11px;color:var(--muted);margin-bottom:12px">🔗 Linked to site: ' + esc(linkedSite.name) + '</div>' : '') +
     '<div class="field-row">' +
     '<div class="field"><label>First Name</label><input id="ct-first-' + id + '" oninput="onContactRecordFieldChange(\'' + id + '\')" value="' + esc(c.firstName) + '"></div>' +
     '<div class="field"><label>Surname</label><input id="ct-last-' + id + '" oninput="onContactRecordFieldChange(\'' + id + '\')" value="' + esc(c.lastName) + '"></div>' +
@@ -1506,12 +1563,22 @@ function onContactRecordFieldChange(id) {
     });
   });
   refreshContactsHeader();
+  syncContactToSite(id);
   autosaveContacts();
 }
 
 function deleteContactInline(id) {
   if (!confirm('Delete this contact?')) return;
   state.contacts = (state.contacts || []).filter(function(c) { return c.id !== id; });
+  // Clear the link on whichever site pointed at this contact, so it doesn't
+  // reference a contact that no longer exists.
+  var linkedSite = findLinkedSite(id);
+  if (linkedSite) {
+    state.sites = state.sites.map(function(s) {
+      return s.id === linkedSite.id ? Object.assign({}, s, { contactId: null }) : s;
+    });
+    autosaveSites();
+  }
   editingContactId = null;
   expandedContactId = null;
   toast('Contact deleted', 'success');
@@ -1529,6 +1596,53 @@ function startAddContact() {
   expandedContactId = id;
   refreshContactsList();
   refreshContactsHeader();
+}
+
+// One-time best-effort split of a legacy Site "Website Name" into first/last
+// — only used here, at import, to bridge old data into the new structured
+// Artist First/Last Name fields. Ongoing sync afterwards is exact, no guessing.
+function splitNameGuess(fullName) {
+  var parts = (fullName || '').trim().split(/\s+/);
+  if (parts.length === 0 || !parts[0]) return { first: '', last: '' };
+  if (parts.length === 1) return { first: parts[0], last: '' };
+  return { first: parts.slice(0, -1).join(' '), last: parts[parts.length - 1] };
+}
+
+function importContactsFromSites() {
+  var sites = state.sites || [];
+  var unlinked = sites.filter(function(s) { return !s.contactId; });
+  if (unlinked.length === 0) {
+    toast('All sites are already linked to a contact', 'error');
+    return;
+  }
+
+  var imported = 0;
+  state.sites = sites.map(function(s) {
+    if (s.contactId) return s;
+
+    var first = s.artistFirstName || '';
+    var last = s.artistLastName || '';
+    if (!first && !last && s.name) {
+      var guess = splitNameGuess(s.name);
+      first = guess.first;
+      last = guess.last;
+    }
+
+    var contactId = String(Date.now()) + '-' + imported;
+    state.contacts.push({
+      id: contactId, firstName: first, lastName: last,
+      business: '', email: s.email || '', source: '', tags: []
+    });
+    imported++;
+
+    return Object.assign({}, s, { artistFirstName: first, artistLastName: last, contactId: contactId });
+  });
+
+  refreshContactsList();
+  refreshContactsHeader();
+  autosaveContacts();
+  autosaveSites();
+  toast('Imported ' + imported + ' contact' + (imported === 1 ? '' : 's') + ' from Sites ✓', 'success');
 }
 
 // ── EMAIL INBOX ────────────────────────────────────────────────────────────────
