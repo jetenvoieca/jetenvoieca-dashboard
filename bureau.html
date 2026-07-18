@@ -121,12 +121,15 @@ button,input,textarea,select{font-family:'Jost',sans-serif;font-size:13px;font-w
       <button class="preview-refresh" onclick="refreshPreview()" title="Refresh">Refresh</button>
     </div>
     <iframe id="preview" src="/" title="Site preview" onload="handlePreviewLoad()"></iframe>
-    <div id="preview-image-wrap" style="display:none;flex:1;align-items:center;justify-content:center;padding:60px;overflow:auto;background:var(--cream)">
-      <img id="preview-image" style="display:none;max-width:70%;max-height:70%;object-fit:contain;border-radius:6px;box-shadow:0 10px 34px rgba(0,0,0,.14)">
-      <div id="preview-image-fallback" style="display:none;flex-direction:column;align-items:center;gap:14px">
-        <img id="preview-image-favicon" style="width:56px;height:56px;border-radius:50%;box-shadow:0 2px 10px rgba(0,0,0,.12)">
-        <p id="preview-image-domain" style="font-size:13px;color:var(--muted);letter-spacing:.02em"></p>
+    <div id="preview-image-wrap" style="display:none;flex:1;flex-direction:column;overflow-y:auto;background:var(--cream)">
+      <div style="padding:50px 50px 20px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <img id="preview-image" style="display:none;max-width:100%;max-height:380px;object-fit:contain;border-radius:6px;box-shadow:0 10px 34px rgba(0,0,0,.14)">
+        <div id="preview-image-fallback" style="display:none;flex-direction:column;align-items:center;gap:14px">
+          <img id="preview-image-favicon" style="width:56px;height:56px;border-radius:50%;box-shadow:0 2px 10px rgba(0,0,0,.12)">
+          <p id="preview-image-domain" style="font-size:13px;color:var(--muted);letter-spacing:.02em"></p>
+        </div>
       </div>
+      <div id="site-detail-panel" style="padding:0 40px 40px"></div>
     </div>
   </div>
 
@@ -423,6 +426,8 @@ function setPreview(mode, page) {
   wrap.style.display = 'none';
   iframe.style.display = '';
   setFramedSiteButton(null);
+  var detailPanel = document.getElementById('site-detail-panel');
+  if (detailPanel) detailPanel.innerHTML = '';
 
   // Relative paths (not the absolute jetenvoieca.com domain) — guarantees
   // the iframe is same-origin as Bureau no matter which URL Bureau itself is
@@ -551,13 +556,28 @@ function showSiteImage(site) {
 
   iframe.style.display = 'none';
   wrap.style.display = 'flex';
+  setFramedSiteButton(null); // showing the static image, not the framed site yet
+
+  if (!site.url) {
+    // Brand new site, nothing to preview yet — no click-to-open, just a
+    // placeholder until a URL is entered in the form below.
+    wrap.style.cursor = 'default';
+    wrap.onclick = null;
+    urlLabel.textContent = 'jetenvoieca.com/dashboard';
+    img.style.display = 'none';
+    fallback.style.display = 'flex';
+    document.getElementById('preview-image-favicon').style.display = 'none';
+    document.getElementById('preview-image-domain').textContent = 'Add a URL to see a preview';
+    return;
+  }
+
   wrap.style.cursor = 'pointer';
   wrap.onclick = function() { loadSiteInFrame(site); };
   urlLabel.textContent = hostnameOf(site.url);
-  setFramedSiteButton(null); // showing the static image, not the framed site yet
 
   img.style.display = '';
   fallback.style.display = 'none';
+  document.getElementById('preview-image-favicon').style.display = '';
   img.onerror = function() {
     img.style.display = 'none';
     fallback.style.display = 'flex';
@@ -853,39 +873,51 @@ function renderSitesRows(sites) {
   }
 
   return sites.map(function(s) {
-    var open = expandedSiteId === s.id;
-    var row = '<div onclick="selectSite(\'' + s.id + '\')" style="display:flex;align-items:center;padding:10px 0;gap:10px;cursor:pointer;' +
-      (open
-        ? 'background:var(--ivory);margin:0 -8px;padding-left:8px;padding-right:8px;border-radius:4px 4px 0 0'
-        : 'border-bottom:.5px solid var(--border)') + '">' +
+    var selected = expandedSiteId === s.id;
+    return '<div onclick="selectSite(\'' + s.id + '\')" style="display:flex;align-items:center;padding:10px 0;gap:10px;cursor:pointer;border-bottom:.5px solid var(--border);' +
+      (selected ? 'background:var(--ivory);margin:0 -8px;padding-left:8px;padding-right:8px' : '') + '">' +
       '<div style="flex:1;min-width:0">' +
       '<div style="font-family:\'Cormorant Garamond\',serif;font-size:15px;font-style:italic">' + (esc(s.name) || '<span style="color:var(--muted);font-style:normal">Untitled site</span>') + '</div>' +
       '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + esc(s.url||'') + '</div></div>' +
       (s.sub_amount ? '<span style="font-size:11px;color:var(--gold);flex-shrink:0">£' + esc(s.sub_amount) + '/mo</span>' : '') +
       (s.verified ? '<span style="width:18px;height:18px;border-radius:50%;background:#2e7d32;color:white;font-size:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0">✓</span>' : '') +
       '</div>';
-    var panel = '';
-    if (editingSiteId === s.id) panel = renderSiteEditForm(s);
-    else if (open) panel = renderSiteDetail(s);
-    return row + panel;
   }).join('');
 }
 
-// Read-only detail panel, shown alongside the image preview when a row is
-// clicked. Edit is the further step into the actual edit form.
-function renderSiteDetail(s) {
-  return '<div onclick="event.stopPropagation()" style="margin:0 -8px;padding:10px 8px 12px;background:var(--ivory);border-radius:0 0 4px 4px;border-bottom:.5px solid var(--border)">' +
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:12px;margin-bottom:10px">' +
+// Populates the panel under the preview image — read-only card, or the edit
+// form if Edit was clicked. Lives in the preview pane now, not the list.
+function renderSiteDetailPanel(site) {
+  var container = document.getElementById('site-detail-panel');
+  if (!container) return;
+  if (!site) { container.innerHTML = ''; return; }
+  container.innerHTML = (editingSiteId === site.id) ? renderSiteEditForm(site) : renderSiteInfoCard(site);
+}
+
+function renderSiteInfoCard(s) {
+  var linkedContact = findLinkedContact(s.id);
+  return '<div style="background:var(--ivory);border-radius:8px;padding:22px 24px;margin-top:20px">' +
+    '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px">' +
+    '<div><div style="font-family:\'Cormorant Garamond\',serif;font-size:20px;font-style:italic">' + (esc(s.name) || 'Untitled site') + '</div>' +
+    '<div style="font-size:12px;color:var(--muted);margin-top:2px">' + esc(s.url || '') + '</div></div>' +
+    '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0">' +
+    (s.sub_amount ? '<span style="font-size:13px;color:var(--gold)">£' + esc(s.sub_amount) + '/mo</span>' : '') +
+    (s.verified ? '<span style="width:20px;height:20px;border-radius:50%;background:#2e7d32;color:white;font-size:12px;display:flex;align-items:center;justify-content:center">✓</span>' : '') +
+    '</div></div>' +
+    (linkedContact ? '<div style="font-size:11px;color:var(--muted);margin:8px 0">🔗 Linked to contact: ' + esc((linkedContact.firstName + ' ' + linkedContact.lastName).trim()) + '</div>' : '') +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;font-size:12px;margin:14px 0">' +
     '<div><div style="color:var(--muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px">Email</div>' + (esc(s.email) || '—') + '</div>' +
-    '<div><div style="color:var(--muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px">URL</div><a href="' + esc(s.url) + '" target="_blank" style="color:var(--noir)">' + esc(s.url) + '</a></div>' +
+    '<div><div style="color:var(--muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px">URL</div>' + (s.url ? '<a href="' + esc(s.url) + '" target="_blank" style="color:var(--noir)">' + esc(s.url) + '</a>' : '—') + '</div>' +
     '<div><div style="color:var(--muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px">Payment</div>' + (esc(s.sub_method) || '—') + (s.sub_amount ? ' · £' + esc(s.sub_amount) + '/mo' : '') + '</div>' +
     '<div><div style="color:var(--muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px">Domain</div>' + (s.domain_owned ? 'Owned via Namecheap' : 'Not tracked') + (s.nc_expiry ? ' · exp ' + new Date(s.nc_expiry).toLocaleDateString('en-GB') : '') + '</div>' +
     '</div>' +
-    (s.notes ? '<div style="font-size:12px;margin-bottom:10px"><div style="color:var(--muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px">Notes</div>' + esc(s.notes).replace(/\n/g, '<br>') + '</div>' : '') +
+    (s.notes ? '<div style="font-size:12px;margin-bottom:14px"><div style="color:var(--muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px">Notes</div>' + esc(s.notes).replace(/\n/g, '<br>') + '</div>' : '') +
     '<div style="display:flex;align-items:center;justify-content:space-between">' +
-    '<button class="btn-cancel" style="padding:7px 13px;font-size:10px" onclick="startEditSite(\'' + s.id + '\')">Edit</button>' +
+    '<button class="btn-cancel" onclick="startEditSite(\'' + s.id + '\')">Edit</button>' +
     '<button onclick="selectSite(\'' + s.id + '\')" title="Close" style="background:none;border:none;color:var(--muted);font-size:16px;line-height:1;cursor:pointer;padding:4px 6px">×</button>' +
-    '</div></div>';
+    '</div>' +
+    (s.email ? renderSiteEmailBlock(s) : '') +
+    '</div>';
 }
 
 // Every field here autosaves on change — no Save button. Delete removes the
@@ -894,7 +926,7 @@ function renderSiteDetail(s) {
 function renderSiteEditForm(s) {
   var id = s.id;
   var linkedContact = findLinkedContact(id);
-  return '<div onclick="event.stopPropagation()" style="padding:16px 12px 18px;background:var(--ivory);border-radius:0 0 6px 6px;margin-bottom:2px">' +
+  return '<div style="background:var(--ivory);border-radius:8px;padding:22px 24px;margin-top:20px">' +
     (linkedContact ? '<div style="font-size:11px;color:var(--muted);margin-bottom:12px">🔗 Linked to contact: ' + esc((linkedContact.firstName + ' ' + linkedContact.lastName).trim()) + '</div>' : '') +
     '<div class="field"><label>Website Name</label><input id="se-name-' + id + '" oninput="onSiteFieldChange(\'' + id + '\')" value="' + esc(s.name) + '"></div>' +
     '<div class="field-row">' +
@@ -926,6 +958,156 @@ function renderSiteEditForm(s) {
     '</div></div>';
 }
 
+// ── Email history within a site's panel — mirrors the Contacts one, keyed
+// by site id and using the site's own Email field as the address.
+var siteEmailCache = {};
+var siteEmailLoading = {};
+var siteComposing = {};
+var expandedSiteEmailKey = null;
+var siteEmailBodyCache = {};
+
+function renderSiteEmailBlock(s) {
+  return '<div style="padding-top:14px;margin-top:14px;border-top:.5px solid var(--border)">' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">' +
+    '<div style="font-size:10px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase">Email History</div>' +
+    '<button class="btn-cancel" onclick="startSiteCompose(\'' + s.id + '\')" style="padding:5px 12px;font-size:10px">Send Email</button>' +
+    '</div>' +
+    '<div id="site-emails-' + s.id + '">' + renderSiteEmailSection(s) + '</div>' +
+    '</div>';
+}
+
+function renderSiteEmailSection(s) {
+  var id = s.id;
+  var html = siteComposing[id] ? renderSiteComposeForm(s) : '';
+
+  if (siteEmailLoading[id]) {
+    return html + '<p style="font-size:12px;color:var(--muted)">Loading…</p>';
+  }
+  var messages = siteEmailCache[id];
+  if (!messages) {
+    loadSiteEmails(id);
+    return html + '<p style="font-size:12px;color:var(--muted)">Loading…</p>';
+  }
+  if (messages.length === 0) {
+    return html + '<p style="font-size:12px;color:var(--muted)">No emails found with this address</p>';
+  }
+
+  html += messages.map(function(m) {
+    var key = m.mailbox + ':' + m.uid;
+    var open = expandedSiteEmailKey === key;
+    var row = '<div onclick="toggleSiteEmail(\'' + id + '\',\'' + esc(m.mailbox).replace(/'/g,"") + '\',' + m.uid + ')" style="display:flex;align-items:center;gap:8px;padding:8px 0;cursor:pointer;' +
+      (open ? 'background:white;margin:0 -6px;padding-left:6px;padding-right:6px;border-radius:4px 4px 0 0' : 'border-bottom:.5px solid var(--border)') + '">' +
+      '<span style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;flex-shrink:0;width:52px">' + (m.direction === 'sent' ? 'Sent' : 'Received') + '</span>' +
+      '<div style="flex:1;min-width:0;font-size:12px;color:var(--noir);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(m.subject) + '</div>' +
+      '<div style="font-size:10px;color:var(--muted);flex-shrink:0">' + formatEmailDate(m.date) + '</div>' +
+      '</div>';
+    var detail = open ? renderSiteEmailDetail(m) : '';
+    return row + detail;
+  }).join('');
+  return html;
+}
+
+function refreshSiteEmailSection(siteId) {
+  var el = document.getElementById('site-emails-' + siteId);
+  var site = state.sites.find(function(x) { return x.id === siteId; });
+  if (el && site) el.innerHTML = renderSiteEmailSection(site);
+}
+
+async function loadSiteEmails(siteId) {
+  var s = state.sites.find(function(x) { return x.id === siteId; });
+  if (!s || !s.email) return;
+  siteEmailLoading[siteId] = true;
+  try {
+    var res = await authFetch('/.netlify/functions/email-inbox?contactEmail=' + encodeURIComponent(s.email));
+    var json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Failed to load emails');
+    siteEmailCache[siteId] = json.messages || [];
+  } catch (err) {
+    siteEmailCache[siteId] = [];
+    toast('Could not load emails: ' + err.message, 'error');
+  }
+  siteEmailLoading[siteId] = false;
+  refreshSiteEmailSection(siteId);
+}
+
+function toggleSiteEmail(siteId, mailbox, uid) {
+  var key = mailbox + ':' + uid;
+  expandedSiteEmailKey = (expandedSiteEmailKey === key) ? null : key;
+  refreshSiteEmailSection(siteId);
+}
+
+function renderSiteEmailDetail(m) {
+  var key = m.mailbox + ':' + m.uid;
+  var cached = siteEmailBodyCache[key];
+  if (!cached) {
+    loadSiteEmailBody(m);
+    return '<div onclick="event.stopPropagation()" style="padding:10px 6px;background:white;border-bottom:.5px solid var(--border)">' +
+      '<p style="font-size:11px;color:var(--muted)">Loading…</p></div>';
+  }
+  var bodyText = cached.text || stripHtmlTags(cached.html) || '(empty message)';
+  return '<div onclick="event.stopPropagation()" style="padding:10px 6px 12px;background:white;border-bottom:.5px solid var(--border)">' +
+    '<div style="font-size:10px;color:var(--muted);margin-bottom:8px">' + (m.direction === 'sent' ? 'To ' + esc(m.to) : 'From ' + esc(m.from)) + '</div>' +
+    '<div style="font-size:12px;line-height:1.65;white-space:pre-wrap">' + esc(bodyText) + '</div>' +
+    '</div>';
+}
+
+async function loadSiteEmailBody(m) {
+  var key = m.mailbox + ':' + m.uid;
+  try {
+    var res = await authFetch('/.netlify/functions/email-inbox?uid=' + m.uid + '&mailbox=' + encodeURIComponent(m.mailbox));
+    var json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Failed to load message');
+    siteEmailBodyCache[key] = json;
+  } catch (err) {
+    siteEmailBodyCache[key] = { text: 'Could not load this message: ' + err.message };
+  }
+  if (expandedSiteEmailKey === key && expandedSiteId) refreshSiteEmailSection(expandedSiteId);
+}
+
+function startSiteCompose(siteId) {
+  siteComposing[siteId] = true;
+  refreshSiteEmailSection(siteId);
+}
+
+function cancelSiteCompose(siteId) {
+  siteComposing[siteId] = false;
+  refreshSiteEmailSection(siteId);
+}
+
+function renderSiteComposeForm(s) {
+  var id = s.id;
+  return '<div onclick="event.stopPropagation()" style="padding:12px;background:white;border-radius:4px;margin-bottom:12px;border:.5px solid var(--border)">' +
+    '<div class="field"><label>To</label><input id="sc-to-' + id + '" value="' + esc(s.email || '') + '"></div>' +
+    '<div class="field"><label>Subject</label><input id="sc-subject-' + id + '"></div>' +
+    '<div class="field"><label>Message</label><textarea id="sc-body-' + id + '" rows="6"></textarea></div>' +
+    '<div class="form-actions">' +
+    '<button class="btn-cancel" onclick="cancelSiteCompose(\'' + id + '\')">Cancel</button>' +
+    '<button class="btn-save" onclick="sendSiteCompose(\'' + id + '\')">Send</button>' +
+    '</div></div>';
+}
+
+async function sendSiteCompose(siteId) {
+  var to = val('sc-to-' + siteId).trim();
+  var subject = val('sc-subject-' + siteId).trim();
+  var text = val('sc-body-' + siteId).trim();
+  if (!to || !text) { toast('To and message are required', 'error'); return; }
+  try {
+    var res = await authFetch('/.netlify/functions/email-send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: to, subject: subject, text: text })
+    });
+    var json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Send failed');
+    toast('Sent ✓', 'success');
+    siteComposing[siteId] = false;
+    delete siteEmailCache[siteId]; // force refresh so the new sent message shows up
+    refreshSiteEmailSection(siteId);
+  } catch (err) {
+    toast('Send failed: ' + err.message, 'error');
+  }
+}
+
 // Re-renders only the rows list, so the search input never loses focus while typing.
 function filterSitesList(term) {
   sitesSearchTerm = term;
@@ -955,7 +1137,7 @@ function selectSite(id) {
     expandedSiteId = id;
     editingSiteId = null;
     var site = state.sites.find(function(s) { return s.id === id; });
-    if (site) showSiteImage(site);
+    if (site) { showSiteImage(site); renderSiteDetailPanel(site); }
   }
   refreshSitesList();
 }
@@ -964,7 +1146,7 @@ function startEditSite(id) {
   editingSiteId = id;
   expandedSiteId = id;
   var site = state.sites.find(function(s) { return s.id === id; });
-  if (site) showSiteImage(site);
+  if (site) { showSiteImage(site); renderSiteDetailPanel(site); }
   refreshSitesList();
 }
 
@@ -1001,6 +1183,7 @@ function onSiteFieldChange(id) {
     });
   });
   refreshSitesHeader();
+  refreshSitesList();
   syncSiteToContact(id);
   autosaveSites();
 }
@@ -1063,7 +1246,7 @@ async function onSiteImageChange(id) {
     return s.id === id ? Object.assign({}, s, { image: newImage }) : s;
   });
   var updated = state.sites.find(function(s) { return s.id === id; });
-  if (updated) showSiteImage(updated);
+  if (updated) { showSiteImage(updated); renderSiteDetailPanel(updated); }
   autosaveSites();
 }
 
@@ -1091,7 +1274,8 @@ function startAddSite() {
   editingSiteId = site.id;
   expandedSiteId = site.id;
   sitesSearchTerm = ''; // otherwise a new blank record could be hidden by an active search filter
-  setPreview(previewMode);
+  showSiteImage(site);
+  renderSiteDetailPanel(site);
   refreshSitesList();
   refreshSitesHeader();
 }
