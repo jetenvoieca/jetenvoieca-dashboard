@@ -1,2 +1,19 @@
 [functions]
   directory = "netlify/functions"
+
+# Sends anything under /Studio to the separate, isolated Studio Directory
+# shell (its own repo/site: jetenvoieca-studio). This is a proxy redirect
+# (status 200) — the browser's address bar keeps showing jetenvoieca.com/Studio,
+# but the content actually comes from the other site. Nothing else in this
+# repo is affected.
+[[redirects]]
+  from = "/Studio"
+  to = "https://jetenvoieca-studio.netlify.app/"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/Studio/*"
+  to = "https://jetenvoieca-studio.netlify.app/:splat"
+  status = 200
+  force = true
