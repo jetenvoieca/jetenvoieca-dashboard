@@ -89,5 +89,11 @@
   "financial": {
     "vatRate": "20",
     "urssafRate": "23"
+  },
+  "artists": {
+    "eyebrow": "Artists",
+    "title": "Managed websites for artists ",
+    "body": "Beautiful, minimal portfolio sites. Built to show the work, not obscure it. Every site different. Every artist served.",
+    "cta": "Get in touch"
   }
 }
