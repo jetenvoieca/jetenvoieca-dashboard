@@ -43,6 +43,15 @@
       "image": null,
       "visible": true,
       "slug": "page"
+    },
+    {
+      "id": "1786625710647",
+      "title": "",
+      "eyebrow": "",
+      "body": "",
+      "image": null,
+      "visible": true,
+      "slug": "page-2"
     }
   ],
   "navPages": [
@@ -73,6 +82,11 @@
     },
     {
       "id": "1783960877229",
+      "kind": "custom",
+      "inMenu": true
+    },
+    {
+      "id": "1786625710647",
       "kind": "custom",
       "inMenu": true
     }
